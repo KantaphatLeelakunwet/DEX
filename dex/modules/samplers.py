@@ -1,6 +1,9 @@
 from ..utils.general_utils import AttrDict, listdict2dictlist
 from ..utils.rl_utils import ReplayCache
-from ...CBF.cbf import ODEFunc
+
+import sys
+sys.path.append('./CBF')
+from CBF.cbf import ODEFunc
 
 import os
 import torch
