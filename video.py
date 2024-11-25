@@ -42,7 +42,8 @@ if __name__ == "__main__":
         print("Usage: python video.py <video_name>")
 
     image_folder = './pic'
-    video_name = sys.argv[2]  # 'output_video.mp4'  # Desired output video name
+    print(sys.argv[1])
+    video_name = sys.argv[1]  # 'output_video.mp4'  # Desired output video name
     fps = 10  # Frames per second
 
     create_video_from_images(image_folder, video_name, fps)
