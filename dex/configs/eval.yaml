@@ -4,7 +4,7 @@ defaults:
 
 postfix: eval_ckpt
 dont_save: False
-n_eval_episodes: 50
+n_eval_episodes: 1
 ckpt_dir: ./exp_local/${task}/${agent.name}/d${num_demo}/s${seed}/model
 ckpt_episode: latest
 
