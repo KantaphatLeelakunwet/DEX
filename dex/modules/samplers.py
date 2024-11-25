@@ -1,6 +1,6 @@
 from ..utils.general_utils import AttrDict, listdict2dictlist
 from ..utils.rl_utils import ReplayCache
-from .cbf import ODEFunc
+from ...CBF.cbf import ODEFunc
 
 import os
 import torch
@@ -27,7 +27,8 @@ class Sampler:
 
         # Initialize neuralODE for CBF (Evaluation ONLY)
         self.func = ODEFunc([3, 64, 12]).to(self.device)
-        self.func.load_state_dict(torch.load("./dex/modules/model_test10.pth"))
+        self.func.load_state_dict(torch.load(
+            "./dex/modules/saved_model/model_test10.pth"))
         self.func.eval()
 
     def init(self):
