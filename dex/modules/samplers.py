@@ -28,7 +28,7 @@ class Sampler:
         # Initialize neuralODE for CBF (Evaluation ONLY)
         self.func = ODEFunc([3, 64, 12]).to(self.device)
         self.func.load_state_dict(torch.load(
-            "./dex/modules/saved_model/model_test10.pth"))
+            "./CBF/saved_model/model_test10.pth"))
         self.func.eval()
 
     def init(self):
