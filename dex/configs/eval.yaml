@@ -19,3 +19,6 @@ mpi: { rank: null, is_chef: null, num_workers: null }
 hydra:
   run:
     dir: ./exp_local/${task}/${agent.name}/d${num_demo}/eval/s${seed}
+
+max_episode_steps: 100
+train: False
