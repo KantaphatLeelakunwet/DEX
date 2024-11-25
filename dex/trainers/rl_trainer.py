@@ -32,43 +32,48 @@ class RLTrainer(BaseTrainer):
 
     def _setup_env(self):
         self.train_env = gym.make(self.cfg.task)
-        self.train_env._max_episode_steps = 100
+        self.train_env._max_episode_steps = self.cfg.max_episode_steps
         self.eval_env = gym.make(self.cfg.task)
-        self.eval_env._max_episode_steps = 100 # Add arguemtn
+        self.eval_env._max_episode_steps = self.cfg.max_episode_steps
         self.env_params = get_env_params(self.train_env, self.cfg)
-        
+
     def _setup_buffer(self):
-        self.buffer_sampler = get_buffer_sampler(self.train_env, self.cfg.agent.sampler)
+        self.buffer_sampler = get_buffer_sampler(
+            self.train_env, self.cfg.agent.sampler)
         self.buffer = HerReplayBuffer(buffer_size=self.cfg.replay_buffer_capacity, env_params=self.env_params,
-                            batch_size=self.cfg.batch_size, sampler=self.buffer_sampler)
+                                      batch_size=self.cfg.batch_size, sampler=self.buffer_sampler)
         self.demo_buffer = HerReplayBuffer(buffer_size=self.cfg.replay_buffer_capacity, env_params=self.env_params,
-                            batch_size=self.cfg.batch_size, sampler=self.buffer_sampler)
-        
+                                           batch_size=self.cfg.batch_size, sampler=self.buffer_sampler)
+
     def _setup_agent(self):
-        self.agent = make_agent(self.env_params, self.buffer_sampler, self.cfg.agent)
+        self.agent = make_agent(
+            self.env_params, self.buffer_sampler, self.cfg.agent)
 
     def _setup_sampler(self):
-        self.train_sampler = Sampler(self.train_env, self.agent, self.env_params['max_timesteps'])
-        self.eval_sampler = Sampler(self.eval_env, self.agent, self.env_params['max_timesteps'])
+        self.train_sampler = Sampler(
+            self.train_env, self.agent, self.env_params['max_timesteps'])
+        self.eval_sampler = Sampler(
+            self.eval_env, self.agent, self.env_params['max_timesteps'])
 
     def _setup_logger(self):
         update_mpi_config(self.cfg)
         if self.is_chef:
             exp_name = f"{self.cfg.task}_{self.cfg.agent.name}_demo{self.cfg.num_demo}_seed{self.cfg.seed}"
             if self.cfg.postfix is not None:
-                exp_name =  exp_name + '_' + str(self.cfg.postfix) 
+                exp_name = exp_name + '_' + str(self.cfg.postfix)
             if self.cfg.use_wb:
-                self.wb = WandBLogger(exp_name=exp_name, project_name=self.cfg.project_name, entity=self.cfg.entity_name, \
-                        path=self.work_dir, conf=self.cfg)
+                self.wb = WandBLogger(exp_name=exp_name, project_name=self.cfg.project_name, entity=self.cfg.entity_name,
+                                      path=self.work_dir, conf=self.cfg)
             self.logger = Logger(self.work_dir)
             self.termlog = logger
-        else: 
+        else:
             self.wb, self.logger, self.termlog = None, None, None
-    
+
     def _setup_misc(self):
-        # Comment out during Evaluation only
-        # init_buffer(self.cfg, self.buffer, self.agent, normalize=False) # important for awac, amp
-        # init_buffer(self.cfg, self.demo_buffer, self.agent, normalize=True)
+        if self.cfg.train:
+            # Important for awac, amp
+            init_buffer(self.cfg, self.buffer, self.agent, normalize=False)
+            init_buffer(self.cfg, self.demo_buffer, self.agent, normalize=True)
 
         if self.is_chef:
             self.model_dir = self.work_dir / 'model'
@@ -81,16 +86,21 @@ class RLTrainer(BaseTrainer):
         self._global_step = 0
         self._global_episode = 0
         set_seed_everywhere(self.cfg.seed)
-    
+
     def train(self):
-        n_train_episodes = int(self.cfg.n_train_steps / self.env_params['max_timesteps'])
-        n_eval_episodes = int(n_train_episodes / self.cfg.n_eval) * self.cfg.mpi.num_workers
-        n_save_episodes = int(n_train_episodes / self.cfg.n_save) * self.cfg.mpi.num_workers
-        n_log_episodes = int(n_train_episodes / self.cfg.n_log) * self.cfg.mpi.num_workers
+        n_train_episodes = int(self.cfg.n_train_steps /
+                               self.env_params['max_timesteps'])
+        n_eval_episodes = int(
+            n_train_episodes / self.cfg.n_eval) * self.cfg.mpi.num_workers
+        n_save_episodes = int(
+            n_train_episodes / self.cfg.n_save) * self.cfg.mpi.num_workers
+        n_log_episodes = int(n_train_episodes /
+                             self.cfg.n_log) * self.cfg.mpi.num_workers
 
         assert n_save_episodes > n_eval_episodes
         if n_save_episodes % n_eval_episodes != 0:
-            n_save_episodes = int(n_save_episodes / n_eval_episodes) * n_eval_episodes
+            n_save_episodes = int(
+                n_save_episodes / n_eval_episodes) * n_eval_episodes
 
         train_until_episode = Until(n_train_episodes)
         save_every_episodes = Every(n_save_episodes)
@@ -107,7 +117,7 @@ class RLTrainer(BaseTrainer):
                 score = self.eval()
 
             if not self.cfg.dont_save and save_every_episodes(self.global_episode) and self.is_chef:
-                filename =  CheckpointHandler.get_ckpt_name(self.global_episode)
+                filename = CheckpointHandler.get_ckpt_name(self.global_episode)
                 # TODO(tao): expose scoring metric
                 CheckpointHandler.save_checkpoint({
                     'episode': self.global_episode,
@@ -117,7 +127,8 @@ class RLTrainer(BaseTrainer):
                     'g_norm': self.agent.g_norm,
                     'score': score,
                 }, self.model_dir, filename)
-                self.termlog.info(f'Save checkpoint to {os.path.join(self.model_dir, filename)}')
+                self.termlog.info(
+                    f'Save checkpoint to {os.path.join(self.model_dir, filename)}')
 
     def _train_episode(self, log_every_episodes, seed_until_steps):
         # sync network parameters across workers
@@ -131,7 +142,8 @@ class RLTrainer(BaseTrainer):
 
         # collect experience
         rollout_storage = RolloutStorage()
-        episode, rollouts, env_steps = self.train_sampler.sample_episode(is_train=True, render=False, random_act=seed_until_steps(ep_start_step))
+        episode, rollouts, env_steps = self.train_sampler.sample_episode(
+            is_train=True, render=False, random_act=seed_until_steps(ep_start_step))
         if self.use_multiple_workers:
             transitions_batch = mpi_gather_experience_episode(rollouts)
         else:
@@ -158,7 +170,8 @@ class RLTrainer(BaseTrainer):
         if metrics is not None and log_every_episodes(self.global_episode) and self.is_chef:
             elapsed_time, total_time = self.timer.reset()
             batch_time.update(elapsed_time)
-            togo_train_time = batch_time.avg * (self.cfg.n_train_steps - ep_start_step) / env_steps
+            togo_train_time = batch_time.avg * \
+                (self.cfg.n_train_steps - ep_start_step) / env_steps
 
             self.logger.log_metrics(metrics, self.global_step, ty='train')
             with self.logger.log_and_dump_ctx(self.global_step, ty='train') as log:
@@ -171,13 +184,15 @@ class RLTrainer(BaseTrainer):
                 log('step', self.global_step)
                 log('ETA', togo_train_time)
             if self.cfg.use_wb:
-                self.wb.log_outputs(metrics, None, log_images=False, step=self.global_step, is_train=True)
+                self.wb.log_outputs(
+                    metrics, None, log_images=False, step=self.global_step, is_train=True)
 
     def eval(self):
         '''Eval agent.'''
         eval_rollout_storage = RolloutStorage()
         for _ in range(self.cfg.n_eval_episodes):
-            episode, _, env_steps = self.eval_sampler.sample_episode(is_train=False, render=True)
+            episode, _, env_steps = self.eval_sampler.sample_episode(
+                is_train=False, render=True)
             eval_rollout_storage.append(episode)
         rollout_status = eval_rollout_storage.rollout_stats()
         if self.use_multiple_workers:
@@ -187,7 +202,8 @@ class RLTrainer(BaseTrainer):
 
         if self.is_chef:
             if self.cfg.use_wb:
-                self.wb.log_outputs(rollout_status, eval_rollout_storage, log_images=True, step=self.global_step)
+                self.wb.log_outputs(
+                    rollout_status, eval_rollout_storage, log_images=True, step=self.global_step)
             with self.logger.log_and_dump_ctx(self.global_step, ty='eval') as log:
                 log('episode_sr', rollout_status.avg_success_rate)
                 log('episode_reward', rollout_status.avg_reward)
@@ -206,7 +222,7 @@ class RLTrainer(BaseTrainer):
             )
             avg_success_rate = self.eval()
             self.termlog.info(f'Successful rate: {avg_success_rate}')
-                
+
     @property
     def global_step(self):
         return self._global_step
