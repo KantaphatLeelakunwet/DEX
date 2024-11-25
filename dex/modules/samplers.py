@@ -4,6 +4,7 @@ from .cbf import ODEFunc
 
 import os
 import torch
+import numpy as np
 import PIL.Image as Image
 
 
@@ -54,6 +55,33 @@ class Sampler:
                 render_obs = self._env.render('rgb_array')
                 img = Image.fromarray(render_obs)
                 img.save(f'pic/image_{self._episode_step}.png')
+
+            with torch.no_grad():
+                x0 = torch.tensor(
+                    self._obs['observation'][0:3]).unsqueeze(0).to(self.device).float()
+
+                # 0.05 is scaling for needlepick only
+                u0 = 0.05 * \
+                    torch.tensor(action[0:3]).unsqueeze(
+                        0).to(self.device).float()
+
+                net_out = self.func.net(x0)  # [1, 12]
+
+                # \dot{x} = f(x) + g(x) * u
+                fx = net_out[:, :3]  # [1, 3]
+                gx = net_out[:, 3:]  # [1, 9]
+
+                g1, g2, g3 = torch.chunk(gx, 3, dim=-1)  # [1, 3]
+                modified_action = self.func.dCBF(x0, u0, fx, g1, g2, g3)
+
+                # Remember to scale back the action before input into gym environment
+                action[0:3] = modified_action.cpu().numpy() / 0.05
+
+            # Display whether the tip of the psm has touch the obstacle or not
+            # True : Collide
+            # False: Safe
+            print(np.sum((self._obs['observation'][0:3] -
+                  np.array([2.66255212, -0.00543937, 3.49126458])) ** 2) < 0.025 ** 2)
 
             obs, reward, done, info = self._env.step(action)
             episode.append(AttrDict(
