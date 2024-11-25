@@ -67,3 +67,9 @@ build/
 
 ## flake8
 .flake8
+
+## model
+saved_model/
+
+## picture folder
+pic/
