@@ -52,6 +52,8 @@ class Sampler:
                 break
             if render:
                 render_obs = self._env.render('rgb_array')
+                img = Image.fromarray(render_obs)
+                img.save(f'pic/image_{self._episode_step}.png')
 
             obs, reward, done, info = self._env.step(action)
             episode.append(AttrDict(
