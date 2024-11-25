@@ -32,7 +32,9 @@ class RLTrainer(BaseTrainer):
 
     def _setup_env(self):
         self.train_env = gym.make(self.cfg.task)
+        self.train_env._max_episode_steps = 100
         self.eval_env = gym.make(self.cfg.task)
+        self.eval_env._max_episode_steps = 100 # Add arguemtn
         self.env_params = get_env_params(self.train_env, self.cfg)
         
     def _setup_buffer(self):
@@ -64,8 +66,9 @@ class RLTrainer(BaseTrainer):
             self.wb, self.logger, self.termlog = None, None, None
     
     def _setup_misc(self):
-        init_buffer(self.cfg, self.buffer, self.agent, normalize=False) # important for awac, amp
-        init_buffer(self.cfg, self.demo_buffer, self.agent, normalize=True)
+        # Comment out during Evaluation only
+        # init_buffer(self.cfg, self.buffer, self.agent, normalize=False) # important for awac, amp
+        # init_buffer(self.cfg, self.demo_buffer, self.agent, normalize=True)
 
         if self.is_chef:
             self.model_dir = self.work_dir / 'model'
