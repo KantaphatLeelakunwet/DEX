@@ -73,3 +73,6 @@ saved_model/
 
 ## picture folder
 pic/
+
+## video
+*.mp4
