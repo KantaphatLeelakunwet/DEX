@@ -40,7 +40,12 @@ class Sampler:
         """Samples one episode from the environment."""
         self.init()
         episode, done = [], False
-        while not done and self._episode_step < self._max_episode_len:
+        # while not done and self._episode_step < self._max_episode_len:
+
+        # Don't how to directly set the max episode len for gym environment
+        # Leave it as 100 for now.
+        # Each step is 0.1 s, 100 steps is 10 s.
+        while self._episode_step < 100:
             action = self._env.action_space.sample(
             ) if random_act else self.sample_action(self._obs, is_train)
             if action is None:
