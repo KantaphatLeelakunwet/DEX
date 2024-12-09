@@ -58,7 +58,7 @@ data = np.load(
 obs_pos = np.zeros((100, 51, 3))
 obs_orn = np.zeros((100, 51, 4))  # jaw angle included
 acs_pos = data['acs'][:, :, 0:3]
-acs_orn = data['acs'][:, :, 3:5]
+acs_orn = data['acs'][:, :, 3]  # only d_pitch / d_yaw
 
 # Get observation data
 for i in range(100):
