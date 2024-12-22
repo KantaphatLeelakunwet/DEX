@@ -57,13 +57,8 @@ tt = torch.tensor([0., 0.1]).to(device)
 x0 = x_test0.clone().detach().to(device)
 pred_x = x0.unsqueeze(0)
 
-safety = []
-trajectory = []
-trajectory.append(
-    np.array(
-        [x0[0, 0].cpu().item(), x0[0, 1].cpu().item(), x0[0, 2].cpu().item()]
-    )
-)
+total_loss = []
+
 
 with torch.no_grad():
 
@@ -88,20 +83,13 @@ with torch.no_grad():
         pred_x = torch.cat(
             [pred_x, pred[-1, :, :].unsqueeze(0)], dim=0)
         x0 = pred[-1, :, :]
-        trajectory.append(
-            np.array(
-                [x0[0, 0].cpu().item(), x0[0, 1].cpu().item(), x0[0, 2].cpu().item()]
-            )
-        )
 
-        # Compute the distance between robot and obstacle point
-        barrier = (x0[0, 0] - 2.67054296) ** 2 \
-            + (x0[0, 1] - (-0.04659402)) ** 2  \
-            + (x0[0, 2] - 3.4671967) ** 2     \
-            - 0.05 ** 2
-        safety.append(barrier)
+        loss = torch.sum((x0 - x_test[i + 1]) ** 2)
+        total_loss.append(loss)
+        # Display loss
+        print('timestep: ', i,
+              '| loss: ', loss.item())
 
 
-print("====== Safety ======")
-print(torch.sum(torch.tensor(safety) < 0))
-print(np.array(trajectory))
+# Print total loss
+print('total loss: ', np.sum(total_loss))
