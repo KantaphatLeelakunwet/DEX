@@ -8,6 +8,8 @@ from clf import ODEFunc
 parser = argparse.ArgumentParser('ODE demo')
 parser.add_argument('--method', type=str,
                     choices=['dopri5', 'adams'], default='dopri5')
+parser.add_argument('--task', type=str,
+                    choices=['NeedlePick-v0', 'NeedleRegrasp-v0'], default='NeedlePick-v0')
 parser.add_argument('--data_size', type=int, default=50)
 parser.add_argument('--gpu', type=int, default=0)
 parser.add_argument('--use_dclf', action='store_true')
