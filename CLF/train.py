@@ -257,6 +257,6 @@ if __name__ == '__main__':
                 test_count += 1
 
             torch.save(func.state_dict(),
-                       f"../CBF/saved_model/{args.task}_{exp_id}/CLF{format(test_count, '02d')}.pth")
+                       f"{args.task}_{exp_id}/CLF{format(test_count, '02d')}.pth")
             # torch.save(func.state_dict(), "./saved_model/needlepick" + exp_id +
             #            "/model_test" + format(test_count, '02d') + ".pth")

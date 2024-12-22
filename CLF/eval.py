@@ -49,7 +49,7 @@ fc_param = [x_dim, 64, x_dim + x_dim * u_dim]
 # Initialize neural ODE
 func = ODEFunc(fc_param).to(device)
 func.load_state_dict(torch.load(
-    "../CBF/saved_model/{args.task}_{exp_id}/CLF10.pth"))
+    "{args.task}_{exp_id}/CLF10.pth"))
 func.eval()
 
 # Set up initial state
