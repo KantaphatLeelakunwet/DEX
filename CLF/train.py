@@ -63,6 +63,7 @@ acs = np.load('../CBF/data/NeedlePick-v0/acs_orn.npy')  # [100, 50 ,2]
 #       Ignoring acs[4] for now
 #       https://github.com/med-air/SurRoL/blob/main/surrol/tasks/psm_env.py#L196
 acs = acs[:, :, 0] * np.deg2rad(30)  # [100, 50, 1]
+acs = acs.reshape((100, 50, 1))
 acs = torch.tensor(acs).float()
 
 # \dot{x} = f(x) + u * g(x)
