@@ -27,6 +27,7 @@ obs = torch.tensor(obs).float()
 SCALING = 5.0
 acs = np.load('../CBF/data/NeedlePick-v0/acs_orn.npy')  # [100, 50 ,2]
 acs = acs[:, :, 0] * np.deg2rad(30)  # [100, 50, 1]
+acs = acs.reshape((100, 50, 1))
 acs = torch.tensor(acs).float()
 
 # Training data
