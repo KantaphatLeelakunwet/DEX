@@ -78,6 +78,7 @@ class ODEFunc(nn.Module):
             f  ([1, 3]): fx
             g  ([1, 3]): gx
         """
+
         # Assign robot orientation
         x, y, z = robot[0, 0], robot[0, 1], robot[0, 2]
 
@@ -87,20 +88,27 @@ class ODEFunc(nn.Module):
         # Compute CLF
         V = (x - x0) ** 2 + (y - y0) ** 2 + (z - z0) ** 2
 
-        dotV = 2 * (x - x0) * (f[0, 0] + g[0, 0] * u[0, 0]) \
-            + 2 * (y - y0) * (f[0, 1] + g[0, 1] * u[0, 0]) \
-            + 2 * (z - z0) * (f[0, 2] + g[0, 2] * u[0, 0])
+        dotV_f = 2 * (x - x0) * f[0, 0] \
+            + 2 * (y - y0) * f[0, 1] \
+            + 2 * (z - z0) * f[0, 2]
 
-        gamma = 1
+        dotV_g = 2 * (x - x0) * g[0, 0] \
+            + 2 * (y - y0) * g[0, 1] \
+            + 2 * (z - z0) * g[0, 2]
+
         # dotV + epsilon * V <= 0
-        b_safe = gamma * V
-        A_safe = -dotV
+        # dotV_f + dotV_g * u + epsilon * V <= 0
+        # dotV_g * u <= -dotV_f - epsilon * V
+        # Gx <= h
+        epsilon = 1
+        b_safe = - dotV_f - epsilon * V
+        A_safe = dotV_g
 
-        dim = g1.shape[1]  # = 3
+        dim = 1  # u.shape = [1, 1] ## g1.shape[1]  # = 3
         G = A_safe.to(self.device)
         h = b_safe.unsqueeze(0).to(self.device)  # [1, 1]?
         P = torch.eye(dim).to(self.device)  # [3, 3]
-        q = -u.T  # [3, 1]
+        q = -u.T  # [1, 1]
 
         # NOTE: different x from above now
         x = cvx_solver(P.double(), q.double(), G.double(), h.double())
