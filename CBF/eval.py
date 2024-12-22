@@ -1,11 +1,7 @@
 import os
 import argparse
 import numpy as np
-
 import torch
-import torch.nn as nn
-
-from cvxopt import solvers, matrix
 from torchdiffeq import odeint
 from cbf import ODEFunc
 
