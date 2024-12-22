@@ -52,7 +52,7 @@ fc_param = [x_dim, 64, x_dim + x_dim * u_dim]
 # Initialize neural ODE
 func = ODEFunc(fc_param).to(device)
 func.load_state_dict(torch.load(
-    "{args.task}_{exp_id}/CLF10.pth"))
+    f"saved_model/{args.task}/CLF10.pth"))
 func.eval()
 
 # Set up initial state
@@ -70,7 +70,7 @@ with torch.no_grad():
         # u_test[i,:,:] is the actions of test trajectory that at time i
         u_test_i = u_test[i, :, :]  # [1, 1]
 
-        if args.use_dcbf:
+        if args.use_dclf:
 
             net_out = func.net(x0)  # [1, 6]
 
@@ -88,11 +88,12 @@ with torch.no_grad():
         x0 = pred[-1, :, :]
 
         loss = torch.sum((x0 - x_test[i + 1]) ** 2)
-        total_loss.append(loss)
+        total_loss.append(loss.cpu().item())
         # Display loss
         print('timestep: ', i,
               '| loss: ', loss.item())
 
 
 # Print total loss
-print('total loss: ', np.sum(total_loss))
+print('total loss:   ', np.sum(total_loss))
+print('Average loss: ', np.mean(total_loss))
