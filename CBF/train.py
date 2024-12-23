@@ -19,7 +19,8 @@ parser.add_argument('--method', type=str,
                     choices=['dopri8', 'adams'], default='dopri8')  # dopri5
 parser.add_argument('--activation', type=str,
                     choices=['gelu', 'silu', 'tanh'], default='gelu')
-
+parser.add_argument('--task', type=str,
+                    choices=['NeedlePick-v0', 'NeedleRegrasp-v0'], default='NeedlePick-v0')
 # length of each trajectory
 parser.add_argument('--data_size', type=int, default=50)
 
@@ -37,8 +38,6 @@ os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 device = torch.device('cuda:' + str(args.gpu)
                       if torch.cuda.is_available() else 'cpu')
 
-# Just a file number
-exp_id = '0'
 
 # Assume that each time step is 0.1
 # Since the length of each trajectory is 50
@@ -46,7 +45,7 @@ exp_id = '0'
 t = torch.linspace(0., 4.9, args.data_size).to(device)
 
 # Load dataset
-obs = np.load('./data/obs3.npy')  # [100, 51, 19]
+obs = np.load(f'../Data/{args.task}/obs_pos.npy')  # [100, 51, 19]
 # obs[0:3] = [ x, y, z ] coordinates
 # obs[3:6] = orientation in Euler
 # obs[6] = jaw angle
@@ -58,10 +57,13 @@ obs = np.load('./data/obs3.npy')  # [100, 51, 19]
 # Only take in robot position (Done in obs3)
 obs = torch.tensor(obs).float()
 
-SCALING = 5.0
+if args.task == 'NeedlePick-v0':
+    SCALING = 5.0
+else:
+    SCALING = 1.0
 
 # acs3.npy only have 3 coordinates, no need to do slicing
-acs = np.load('./data/acs3.npy')  # [100, 50 ,5]
+acs = np.load(f'../Data/{args.task}/acs_pos.npy')  # [100, 50 ,5]
 # acs[0:3] = [ dx, dy, dz ]
 # acs[3] = d_yaw / d_pitch
 # acs[4] = jaw open > 0, otherwise close
@@ -138,6 +140,9 @@ def get_batch(bitr):  # get training data from bitr-th trajectory
 def makedirs(dirname):
     if not os.path.exists(dirname):
         os.makedirs(dirname)
+    else:
+        print("Directory existed! Please recheck!")
+        exit(0)
 
 
 class RunningAverageMeter(object):
@@ -162,9 +167,12 @@ class RunningAverageMeter(object):
 if __name__ == '__main__':
 
     test_count = 0
+    # Just a file number
+    exp_id = '0'
 
     # Create directory to store trained weights
-    makedirs('needlepick' + exp_id)
+    saved_folder = f'saved_model/{args.task}/{exp_id}'
+    makedirs(saved_folder)
 
     # Set up the dimension of the network
     x_dim = x_train.shape[-1]
@@ -263,5 +271,5 @@ if __name__ == '__main__':
 
                 test_count += 1
 
-            torch.save(func.state_dict(), "./saved_model/needlepick" + exp_id +
-                       "/model_test" + format(test_count, '02d') + ".pth")
+            torch.save(func.state_dict(),
+                       f"{saved_folder}/CBF{format(test_count, '02d')}.pth")
