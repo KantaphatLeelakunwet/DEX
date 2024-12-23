@@ -13,6 +13,7 @@ parser.add_argument('--task', type=str,
 parser.add_argument('--data_size', type=int, default=50)
 parser.add_argument('--gpu', type=int, default=0)
 parser.add_argument('--use_dclf', action='store_true')
+parser.add_argument('--exp_id', type=int, default=0)
 
 args = parser.parse_args()
 
@@ -23,11 +24,11 @@ device = torch.device(
 )
 
 # Load dataset
-obs = np.load('../CBF/data/NeedlePick-v0/obs_orn.npy')  # [100, 51, 4]
+obs = np.load(f'../Data/{args.task}/obs_orn.npy')  # [100, 51, 4]
 obs = obs[:, :, 0:3]  # [100, 51, 3]
 obs = torch.tensor(obs).float()
 SCALING = 5.0
-acs = np.load('../CBF/data/NeedlePick-v0/acs_orn.npy')  # [100, 50 ,2]
+acs = np.load(f'../Data/{args.task}/acs_orn.npy')  # [100, 50 ,2]
 acs = acs[:, :, 0] * np.deg2rad(30)  # [100, 50, 1]
 acs = acs.reshape((100, 50, 1))
 acs = torch.tensor(acs).float()
@@ -52,7 +53,7 @@ fc_param = [x_dim, 64, x_dim + x_dim * u_dim]
 # Initialize neural ODE
 func = ODEFunc(fc_param).to(device)
 func.load_state_dict(torch.load(
-    f"saved_model/{args.task}/CLF10.pth"))
+    f"saved_model/{args.task}/{args.exp_id}/CLF10.pth"))
 func.eval()
 
 # Set up initial state
