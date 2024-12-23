@@ -3,7 +3,7 @@ import argparse
 import numpy as np
 import torch
 from torchdiffeq import odeint
-from clf import ODEFunc
+from clf import CLF
 
 parser = argparse.ArgumentParser('ODE demo')
 parser.add_argument('--method', type=str,
@@ -51,7 +51,7 @@ u_dim = u_train.shape[-1]
 fc_param = [x_dim, 64, x_dim + x_dim * u_dim]
 
 # Initialize neural ODE
-func = ODEFunc(fc_param).to(device)
+func = CLF(fc_param).to(device)
 func.load_state_dict(torch.load(
     f"saved_model/{args.task}/{args.exp_id}/CLF10.pth"))
 func.eval()

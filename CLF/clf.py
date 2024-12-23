@@ -19,10 +19,10 @@ def cvx_solver(P, q, G, h):
     return sol['x']
 
 
-class ODEFunc(nn.Module):
+class CLF(nn.Module):
 
     def __init__(self, fc_param):
-        super(ODEFunc, self).__init__()
+        super(CLF, self).__init__()
 
         self.net = self.build_mlp(fc_param)
 

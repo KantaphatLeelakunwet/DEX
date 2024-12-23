@@ -6,7 +6,7 @@ import numpy as np
 import os
 import argparse
 import time
-from clf import ODEFunc
+from clf import CLF
 
 torch.autograd.set_detect_anomaly(True)
 
@@ -169,7 +169,7 @@ if __name__ == '__main__':
     fc_param = [x_dim, 64, x_dim + x_dim * u_dim]
 
     # Initialize neural ODE
-    func = ODEFunc(fc_param).to(device)
+    func = CLF(fc_param).to(device)
     optimizer = optim.RMSprop(func.parameters(), lr=1e-3)
     # print(func)
 
