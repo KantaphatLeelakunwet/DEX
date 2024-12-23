@@ -3,12 +3,15 @@ from ..utils.rl_utils import ReplayCache
 
 import sys
 sys.path.append('./CBF')
-from CBF.cbf import ODEFunc
+from CBF.cbf import CBF
+sys.path.append('./CLF')
+from CLF.clf import CLF
 
 import os
 import torch
 import numpy as np
 import PIL.Image as Image
+from vec2orn import vector_to_euler
 
 
 class Sampler:
@@ -29,10 +32,15 @@ class Sampler:
         )
 
         # Initialize neuralODE for CBF (Evaluation ONLY)
-        self.func = ODEFunc([3, 64, 12]).to(self.device)
-        self.func.load_state_dict(torch.load(
-            "./CBF/saved_model/model_test10.pth"))
-        self.func.eval()
+        self.CBF = CBF([3, 64, 12]).to(self.device)
+        self.CBF.load_state_dict(torch.load(
+            "./CBF/saved_model/NeedlePick-v0/0/CBF10.pth"))
+        self.CBF.eval()
+        
+        self.CLF = CLF([3, 64, 6]).to(self.device)
+        self.CLF.load_state_dict(torch.load(
+            "./CLF/saved_model/NeedlePick-v0/0/CLF10.pth"))
+        self.CLF.eval()
 
     def init(self):
         """Starts a new rollout. Render indicates whether output should contain image."""
@@ -66,20 +74,45 @@ class Sampler:
 
                 # 0.05 is scaling for needlepick only
                 u0 = 0.05 * \
-                    torch.tensor(action[0:3]).unsqueeze(
-                        0).to(self.device).float()
+                    torch.tensor(action[0:3]).unsqueeze(0).to(self.device).float()
 
-                net_out = self.func.net(x0)  # [1, 12]
+                cbf_out = self.CBF.net(x0)  # [1, 12]
 
                 # \dot{x} = f(x) + g(x) * u
-                fx = net_out[:, :3]  # [1, 3]
-                gx = net_out[:, 3:]  # [1, 9]
+                fx = cbf_out[:, :3]  # [1, 3]
+                gx = cbf_out[:, 3:]  # [1, 9]
 
                 g1, g2, g3 = torch.chunk(gx, 3, dim=-1)  # [1, 3]
-                modified_action = self.func.dCBF(x0, u0, fx, g1, g2, g3)
+                modified_action = self.CBF.dCBF(x0, u0, fx, g1, g2, g3)
 
                 # Remember to scale back the action before input into gym environment
                 action[0:3] = modified_action.cpu().numpy() / 0.05
+                
+                # ===================== CLF =====================
+                
+                needle_rel_pos = self._obs['observation'][10:13]
+                
+                desired_orn = vector_to_euler(needle_rel_pos)
+                desired_orn = torch.tensor(desired_orn).unsqueeze(0).to(self.device).float()
+                
+                orn_x0 = torch.tensor(
+                    self._obs['observation'][3:6]).unsqueeze(0).to(self.device).float()
+                
+                # 0.05 is scaling for needlepick only
+                orn_u0 = np.deg2rad(30) * \
+                    torch.tensor(action[3]).unsqueeze(0).to(self.device).float()
+                    
+                clf_out = self.CLF.net(orn_x0)  # [1, 6]
+
+                # \dot{x} = f(x) + g(x) * u
+                fx = clf_out[:, :3]  # [1, 3]
+                gx = clf_out[:, 3:]  # [1, 3]
+
+                modified_orn = self.CLF.dCLF(orn_x0, desired_orn, orn_u0, fx, gx)
+                
+                # Remember to scale back the action before input into gym environment
+                action[3] = modified_orn.cpu().numpy() / np.deg2rad(30)
+                
 
             # Display whether the tip of the psm has touch the obstacle or not
             # True : Collide
