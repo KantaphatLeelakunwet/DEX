@@ -42,7 +42,7 @@ exp_id = '0'
 t = torch.linspace(0., 4.9, args.data_size).to(device)
 
 # Load dataset
-obs = np.load('../CBF/data/NeedlePick-v0/obs_orn.npy')  # [100, 51, 4]
+obs = np.load(f'../Data/{args.task}/obs_orn.npy')  # [100, 51, 4]
 obs = obs[:, :, 0:3]  # Ignore jaw angle
 obs = torch.tensor(obs).float()  # [100, 51, 3]
 # obs[3:6] = orientation in Euler
@@ -53,7 +53,7 @@ if args.task == 'NeedlePick-v0':
 else:
     SCALING = 1.0
 
-acs = np.load('../CBF/data/NeedlePick-v0/acs_orn.npy')  # [100, 50 ,2]
+acs = np.load('../Data/{args.task}/acs_orn.npy')  # [100, 50 ,2]
 # acs[3] = d_yaw / d_pitch
 # acs[4] = jaw open > 0, otherwise close
 
@@ -131,6 +131,9 @@ def get_batch(bitr):  # get training data from bitr-th trajectory
 def makedirs(dirname):
     if not os.path.exists(dirname):
         os.makedirs(dirname)
+    else:
+        print("Directory existed! Please recheck!")
+        exit(0)
 
 
 class RunningAverageMeter(object):
@@ -157,7 +160,8 @@ if __name__ == '__main__':
     test_count = 0
 
     # Create directory to store trained weights
-    makedirs(f'{args.task}_{exp_id}')
+    saved_folder = f'saved_model/{args.task}/{exp_id}'
+    makedirs(saved_folder)
 
     # Set up the dimension of the network
     x_dim = x_train.shape[-1]
@@ -257,6 +261,4 @@ if __name__ == '__main__':
                 test_count += 1
 
             torch.save(func.state_dict(),
-                       f"{args.task}_{exp_id}/CLF{format(test_count, '02d')}.pth")
-            # torch.save(func.state_dict(), "./saved_model/needlepick" + exp_id +
-            #            "/model_test" + format(test_count, '02d') + ".pth")
+                       f"{saved_folder}/CLF{format(test_count, '02d')}.pth")
