@@ -3,7 +3,7 @@ import argparse
 import numpy as np
 import torch
 from torchdiffeq import odeint
-from cbf import ODEFunc
+from cbf import CBF
 
 parser = argparse.ArgumentParser('ODE demo')
 parser.add_argument('--method', type=str,
@@ -49,7 +49,7 @@ u_dim = u_train.shape[-1]
 fc_param = [x_dim, 64, x_dim + x_dim * u_dim]
 
 # Initialize neural ODE
-func = ODEFunc(fc_param).to(device)
+func = CBF(fc_param).to(device)
 func.load_state_dict(torch.load(
     f"saved_model/{args.task}/{args.exp_id}/CBF10.pth"))
 func.eval()
