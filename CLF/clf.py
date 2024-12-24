@@ -92,9 +92,9 @@ class CLF(nn.Module):
             + 2 * (y - y0) * f[0, 1] \
             + 2 * (z - z0) * f[0, 2]
 
-        dotV_g = 2 * (x - x0) * g[0, 0] \
-            + 2 * (y - y0) * g[0, 1] \
-            + 2 * (z - z0) * g[0, 2]
+        dotV_g = 2 * (x - x0) * g[0, 0].reshape(1, 1) \
+            + 2 * (y - y0) * g[0, 1].reshape(1, 1) \
+            + 2 * (z - z0) * g[0, 2].reshape(1, 1)
 
         # dotV + epsilon * V <= 0
         # dotV_f + dotV_g * u + epsilon * V <= 0

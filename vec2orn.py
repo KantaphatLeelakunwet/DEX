@@ -22,6 +22,6 @@ def vector_to_euler(vector):
     return roll, pitch, yaw
 
 # Example usage
-vector = np.array([0, 0, 1])
-euler_angles = vector_to_euler(vector)
-print("Euler angles (roll, pitch, yaw):", euler_angles)
+# vector = np.array([0, 0, 1])
+# euler_angles = vector_to_euler(vector)
+# print("Euler angles (roll, pitch, yaw):", euler_angles)
