@@ -101,7 +101,8 @@ class CLF(nn.Module):
         # dotV_g * u <= -dotV_f - epsilon * V
         # Gx <= h
         epsilon = 10
-        b_safe = - dotV_f - epsilon * V
+        delta = 1
+        b_safe = - dotV_f - epsilon * V + delta
         A_safe = dotV_g
 
         dim = 1  # u.shape = [1, 1] ## g1.shape[1]  # = 3
