@@ -18,10 +18,11 @@ from vec2orn import vector_to_euler
 class Sampler:
     """Collects rollouts from the environment using the given agent."""
 
-    def __init__(self, env, agent, max_episode_len):
+    def __init__(self, env, agent, max_episode_len, config):
         self._env = env
         self._agent = agent
         self._max_episode_len = max_episode_len
+        self.cfg = config
 
         self._obs = None
         self._episode_step = 0
@@ -70,62 +71,65 @@ class Sampler:
                 img.save(f'pic/image_{self._episode_step}.png')
 
             with torch.no_grad():
-                x0 = torch.tensor(
-                    self._obs['observation'][0:3]).unsqueeze(0).to(self.device).float()
+                if self.cfg.use_dcbf:
+                    x0 = torch.tensor(
+                        self._obs['observation'][0:3]).unsqueeze(0).to(self.device).float()
 
-                # 0.05 is scaling for needlepick only
-                u0 = 0.05 * \
-                    torch.tensor(action[0:3]).unsqueeze(0).to(self.device).float()
+                    # 0.05 is scaling for needlepick only
+                    u0 = 0.05 * \
+                        torch.tensor(action[0:3]).unsqueeze(0).to(self.device).float()
 
-                cbf_out = self.CBF.net(x0)  # [1, 12]
+                    cbf_out = self.CBF.net(x0)  # [1, 12]
 
-                # \dot{x} = f(x) + g(x) * u
-                fx = cbf_out[:, :3]  # [1, 3]
-                gx = cbf_out[:, 3:]  # [1, 9]
+                    # \dot{x} = f(x) + g(x) * u
+                    fx = cbf_out[:, :3]  # [1, 3]
+                    gx = cbf_out[:, 3:]  # [1, 9]
 
-                g1, g2, g3 = torch.chunk(gx, 3, dim=-1)  # [1, 3]
-                modified_action = self.CBF.dCBF(x0, u0, fx, g1, g2, g3)
+                    g1, g2, g3 = torch.chunk(gx, 3, dim=-1)  # [1, 3]
+                    modified_action = self.CBF.dCBF(x0, u0, fx, g1, g2, g3)
 
-                # Remember to scale back the action before input into gym environment
-                action[0:3] = modified_action.cpu().numpy() / 0.05
+                    # Remember to scale back the action before input into gym environment
+                    action[0:3] = modified_action.cpu().numpy() / 0.05
                 
-                # RL Policy
-                self.CBF.u = modified_action
-                pred_next_obs = odeint(self.CBF, x0, tt)[1, :, :]
-                temp_obs = self._obs
-                temp_obs['observation'][0:3] = pred_next_obs.cpu().numpy()
-                pred_action = self._env.action_space.sample(
-                    ) if random_act else self.sample_action(temp_obs, is_train)
-                
-                
-                # ===================== CLF =====================
-                
-                # needle_rel_pos = self._obs['observation'][10:13]
-                
-                # desired_orn = [0.0, 0.0, 1.0] # vector_to_euler(needle_rel_pos)
-                # desired_orn = torch.tensor(desired_orn).unsqueeze(0).to(self.device).float()
-                
-                orn_x0 = torch.tensor(
-                    self._obs['observation'][3:6]).unsqueeze(0).to(self.device).float()
-                
-                # Get desired next orientation
-                self.CLF.u = torch.tensor(pred_action[3].reshape(1, 1)).to(self.device).float()
-                desired_orn = odeint(self.CLF, orn_x0, tt)[1, :, :]
-                
-                # 0.05 is scaling for needlepick only
-                orn_u0 = np.deg2rad(30) * \
-                    torch.tensor(action[3]).unsqueeze(0).to(self.device).float()
+                if self.cfg.use_dclf:
+                    assert self.cfg.use_dcbf
+                    # RL Policy
+                    self.CBF.u = modified_action
+                    pred_next_obs = odeint(self.CBF, x0, tt)[1, :, :]
+                    temp_obs = self._obs
+                    temp_obs['observation'][0:3] = pred_next_obs.cpu().numpy()
+                    pred_action = self._env.action_space.sample(
+                        ) if random_act else self.sample_action(temp_obs, is_train)
                     
-                clf_out = self.CLF.net(orn_x0)  # [1, 6]
+                    
+                    # ===================== CLF =====================
+                    
+                    # needle_rel_pos = self._obs['observation'][10:13]
+                    
+                    # desired_orn = [0.0, 0.0, 1.0] # vector_to_euler(needle_rel_pos)
+                    # desired_orn = torch.tensor(desired_orn).unsqueeze(0).to(self.device).float()
+                    
+                    orn_x0 = torch.tensor(
+                        self._obs['observation'][3:6]).unsqueeze(0).to(self.device).float()
+                    
+                    # Get desired next orientation
+                    self.CLF.u = torch.tensor(pred_action[3].reshape(1, 1)).to(self.device).float()
+                    desired_orn = odeint(self.CLF, orn_x0, tt)[1, :, :]
+                    
+                    # 0.05 is scaling for needlepick only
+                    orn_u0 = np.deg2rad(30) * \
+                        torch.tensor(action[3]).unsqueeze(0).to(self.device).float()
+                        
+                    clf_out = self.CLF.net(orn_x0)  # [1, 6]
 
-                # \dot{x} = f(x) + g(x) * u
-                fx = clf_out[:, :3]  # [1, 3]
-                gx = clf_out[:, 3:]  # [1, 3]
+                    # \dot{x} = f(x) + g(x) * u
+                    fx = clf_out[:, :3]  # [1, 3]
+                    gx = clf_out[:, 3:]  # [1, 3]
 
-                modified_orn = self.CLF.dCLF(orn_x0, desired_orn, orn_u0, fx, gx)
-                
-                # Remember to scale back the action before input into gym environment
-                action[3] = modified_orn.cpu().numpy() / np.deg2rad(30)
+                    modified_orn = self.CLF.dCLF(orn_x0, desired_orn, orn_u0, fx, gx)
+                    
+                    # Remember to scale back the action before input into gym environment
+                    action[3] = modified_orn.cpu().numpy() / np.deg2rad(30)
                 
 
             # Display whether the tip of the psm has touch the obstacle or not

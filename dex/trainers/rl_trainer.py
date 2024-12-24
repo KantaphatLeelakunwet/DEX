@@ -51,9 +51,9 @@ class RLTrainer(BaseTrainer):
 
     def _setup_sampler(self):
         self.train_sampler = Sampler(
-            self.train_env, self.agent, self.env_params['max_timesteps'])
+            self.train_env, self.agent, self.env_params['max_timesteps'], self.cfg)
         self.eval_sampler = Sampler(
-            self.eval_env, self.agent, self.env_params['max_timesteps'])
+            self.eval_env, self.agent, self.env_params['max_timesteps'], self.cfg)
 
     def _setup_logger(self):
         update_mpi_config(self.cfg)
