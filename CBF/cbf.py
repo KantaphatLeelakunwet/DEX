@@ -117,6 +117,7 @@ class CBF(nn.Module):
         x0, y0, z0 = 2.66255212, -0.00543937, 3.49126458
 
         # Radius
+        # Radius = 10 * URDF's radius
         r = 0.05
 
         # Compute barrier function
