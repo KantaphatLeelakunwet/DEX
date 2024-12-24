@@ -9,6 +9,7 @@ from CLF.clf import CLF
 
 import os
 import torch
+from torchdiffeq import odeint
 import numpy as np
 import PIL.Image as Image
 from vec2orn import vector_to_euler
@@ -54,7 +55,7 @@ class Sampler:
         self.init()
         episode, done = [], False
         # while not done and self._episode_step < self._max_episode_len:
-
+        tt = torch.tensor([0., 0.1]).to(self.device)
         # Don't how to directly set the max episode len for gym environment
         # Leave it as 100 for now.
         # Each step is 0.1 s, 100 steps is 10 s.
@@ -88,15 +89,28 @@ class Sampler:
                 # Remember to scale back the action before input into gym environment
                 action[0:3] = modified_action.cpu().numpy() / 0.05
                 
+                # RL Policy
+                self.CBF.u = action[0:3]
+                pred_next_obs = odeint(self.CBF, x0, tt)
+                temp_obs = self._obs
+                temp_obs['observation'][0:3] = pred_next_obs.cpu().numpy()
+                pred_action = self._env.action_space.sample(
+                    ) if random_act else self.sample_action(temp_obs, is_train)
+                
+                
                 # ===================== CLF =====================
                 
                 # needle_rel_pos = self._obs['observation'][10:13]
                 
-                desired_orn = [0.0, 0.0, 1.0] # vector_to_euler(needle_rel_pos)
-                desired_orn = torch.tensor(desired_orn).unsqueeze(0).to(self.device).float()
+                # desired_orn = [0.0, 0.0, 1.0] # vector_to_euler(needle_rel_pos)
+                # desired_orn = torch.tensor(desired_orn).unsqueeze(0).to(self.device).float()
                 
                 orn_x0 = torch.tensor(
                     self._obs['observation'][3:6]).unsqueeze(0).to(self.device).float()
+                
+                # Get desired next orientation
+                self.CLF.u = pred_action[3]
+                desired_orn = odeint(self.CLF, orn_x0, tt)
                 
                 # 0.05 is scaling for needlepick only
                 orn_u0 = np.deg2rad(30) * \
