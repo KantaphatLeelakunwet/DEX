@@ -100,7 +100,7 @@ class CLF(nn.Module):
         # dotV_f + dotV_g * u + epsilon * V <= 0
         # dotV_g * u <= -dotV_f - epsilon * V
         # Gx <= h
-        epsilon = 1
+        epsilon = 10
         b_safe = - dotV_f - epsilon * V
         A_safe = dotV_g
 
