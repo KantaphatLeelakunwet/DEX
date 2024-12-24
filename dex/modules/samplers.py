@@ -90,28 +90,28 @@ class Sampler:
                 
                 # ===================== CLF =====================
                 
-                needle_rel_pos = self._obs['observation'][10:13]
+                # needle_rel_pos = self._obs['observation'][10:13]
                 
-                desired_orn = [0.0, 0.0, 1.0] #vector_to_euler(needle_rel_pos)
-                desired_orn = torch.tensor(desired_orn).unsqueeze(0).to(self.device).float()
+                # desired_orn = [0.0, 0.0, 1.0] #vector_to_euler(needle_rel_pos)
+                # desired_orn = torch.tensor(desired_orn).unsqueeze(0).to(self.device).float()
                 
-                orn_x0 = torch.tensor(
-                    self._obs['observation'][3:6]).unsqueeze(0).to(self.device).float()
+                # orn_x0 = torch.tensor(
+                #     self._obs['observation'][3:6]).unsqueeze(0).to(self.device).float()
                 
-                # 0.05 is scaling for needlepick only
-                orn_u0 = np.deg2rad(30) * \
-                    torch.tensor(action[3]).unsqueeze(0).to(self.device).float()
+                # # 0.05 is scaling for needlepick only
+                # orn_u0 = np.deg2rad(30) * \
+                #     torch.tensor(action[3]).unsqueeze(0).to(self.device).float()
                     
-                clf_out = self.CLF.net(orn_x0)  # [1, 6]
+                # clf_out = self.CLF.net(orn_x0)  # [1, 6]
 
-                # \dot{x} = f(x) + g(x) * u
-                fx = clf_out[:, :3]  # [1, 3]
-                gx = clf_out[:, 3:]  # [1, 3]
+                # # \dot{x} = f(x) + g(x) * u
+                # fx = clf_out[:, :3]  # [1, 3]
+                # gx = clf_out[:, 3:]  # [1, 3]
 
-                modified_orn = self.CLF.dCLF(orn_x0, desired_orn, orn_u0, fx, gx)
+                # modified_orn = self.CLF.dCLF(orn_x0, desired_orn, orn_u0, fx, gx)
                 
-                # Remember to scale back the action before input into gym environment
-                action[3] = modified_orn.cpu().numpy() / np.deg2rad(30)
+                # # Remember to scale back the action before input into gym environment
+                # action[3] = modified_orn.cpu().numpy() / np.deg2rad(30)
                 
 
             # Display whether the tip of the psm has touch the obstacle or not
