@@ -91,7 +91,7 @@ class Sampler:
                 
                 # RL Policy
                 self.CBF.u = modified_action
-                pred_next_obs = odeint(self.CBF, x0, tt)
+                pred_next_obs = odeint(self.CBF, x0, tt)[1, :, :]
                 temp_obs = self._obs
                 temp_obs['observation'][0:3] = pred_next_obs.cpu().numpy()
                 pred_action = self._env.action_space.sample(
@@ -110,7 +110,7 @@ class Sampler:
                 
                 # Get desired next orientation
                 self.CLF.u = torch.tensor(pred_action[3].reshape(1, 1)).to(self.device).float()
-                desired_orn = odeint(self.CLF, orn_x0, tt)
+                desired_orn = odeint(self.CLF, orn_x0, tt)[1, :, :]
                 
                 # 0.05 is scaling for needlepick only
                 orn_u0 = np.deg2rad(30) * \
