@@ -72,7 +72,7 @@ build/
 saved_model/
 
 ## picture folder
-pic/
+saved_eval_pic/
 
 ## video
 *.mp4

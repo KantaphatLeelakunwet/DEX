@@ -13,6 +13,7 @@ from torchdiffeq import odeint
 import numpy as np
 import PIL.Image as Image
 from vec2orn import vector_to_euler
+import copy
 
 
 class Sampler:
@@ -55,12 +56,15 @@ class Sampler:
         """Samples one episode from the environment."""
         self.init()
         episode, done = [], False
-        # while not done and self._episode_step < self._max_episode_len:
+
+        # variable related to odeint in cbf and clf
         tt = torch.tensor([0., 0.1]).to(self.device)
-        # Don't how to directly set the max episode len for gym environment
-        # Leave it as 100 for now.
+        # detect constraint violation
+        violate_constraint = False
+
+        # while not done and self._episode_step < self._max_episode_len:
         # Each step is 0.1 s, 100 steps is 10 s.
-        while self._episode_step < 100:
+        while self._episode_step < self.cfg.max_episode_steps:
             action = self._env.action_space.sample(
             ) if random_act else self.sample_action(self._obs, is_train)
             if action is None:
@@ -68,10 +72,22 @@ class Sampler:
             if render:
                 render_obs = self._env.render('rgb_array')
                 img = Image.fromarray(render_obs)
-                img.save(f'pic/image_{self._episode_step}.png')
+                if not os.path.exists("saved_eval_pic"):
+                    os.mkdir("saved_eval_pic")
+                img.save(f'saved_eval_pic/image_{self._episode_step}.png')
 
-            with torch.no_grad():
-                if self.cfg.use_dcbf:
+            # ===================== CBF =====================
+            if self.cfg.use_dcbf:
+                # Display whether the tip of the psm has touch the obstacle or not
+                # True : Collide
+                # False: Safe
+                constraint = np.sum((self._obs['observation'][0:3] -
+                                     np.array([2.66255212, -0.00543937, 3.49126458])) ** 2) < 0.025 ** 2
+                violate_constraint = violate_constraint or constraint
+                if violate_constraint:
+                    print(f'warning: violate the constraint at episode step {self._episode_step}')
+
+                with torch.no_grad():
                     x0 = torch.tensor(
                         self._obs['observation'][0:3]).unsqueeze(0).to(self.device).float()
 
@@ -90,36 +106,87 @@ class Sampler:
 
                     # Remember to scale back the action before input into gym environment
                     action[0:3] = modified_action.cpu().numpy() / 0.05
-                
-                if self.cfg.use_dclf:
-                    assert self.cfg.use_dcbf
-                    # RL Policy
+
+            # ===================== CLF =====================
+            if self.cfg.use_dclf:
+                assert self.cfg.use_dcbf
+                with torch.no_grad():
+                    # predicted next position given the modified action
                     self.CBF.u = modified_action
-                    pred_next_obs = odeint(self.CBF, x0, tt)[1, :, :]
-                    temp_obs = self._obs
-                    temp_obs['observation'][0:3] = pred_next_obs.cpu().numpy()
-                    pred_action = self._env.action_space.sample(
-                        ) if random_act else self.sample_action(temp_obs, is_train)
-                    
-                    
-                    # ===================== CLF =====================
-                    
-                    # needle_rel_pos = self._obs['observation'][10:13]
-                    
-                    # desired_orn = [0.0, 0.0, 1.0] # vector_to_euler(needle_rel_pos)
-                    # desired_orn = torch.tensor(desired_orn).unsqueeze(0).to(self.device).float()
-                    
+                    pred_next_position = odeint(self.CBF, x0, tt)[1, :, :]
+
+                # ------------get desired orientation------------
+                # use predicted next position and the critic to get the desired orientation
+
+                # Get initial guess for orientation
+                with torch.no_grad():
                     orn_x0 = torch.tensor(
                         self._obs['observation'][3:6]).unsqueeze(0).to(self.device).float()
-                    
-                    # Get desired next orientation
-                    self.CLF.u = torch.tensor(pred_action[3].reshape(1, 1)).to(self.device).float()
-                    desired_orn = odeint(self.CLF, orn_x0, tt)[1, :, :]
-                    
+                    self.CLF.u = torch.tensor(action[3].reshape(1, 1)).to(self.device).float()
+                    update_orn = odeint(self.CLF, orn_x0, tt)[1, 0, :]
+                # update_orn = torch.tensor(self._obs['observation'][3:6]).cuda().float()
+                for _ in range(10):
+                    o = torch.tensor(self._obs['observation']).reshape(1, -1).cuda().float()
+                    g = torch.tensor(self._obs['desired_goal']).reshape(1, -1).cuda().float()
+                    o[:, 0:3] = pred_next_position
+                    update_orn.requires_grad = True
+                    o[:, 3:6] = update_orn
+
+                    # calculate gradient of the critic with respect to the orientation
+                    input_tensor = self._agent._preproc_inputs(o, g, device='cuda')
+                    predicted_next_action = self._agent.actor(input_tensor)
+                    value = self._agent.critic_target(input_tensor, predicted_next_action)
+                    value.backward()
+
+                    update_grad = update_orn.grad.clone().detach()
+
+                    # update the orientation with the gradient
+                    step_size = 0.001
+                    with torch.no_grad():
+                        updated_orn = update_orn+update_grad*step_size
+
+                    # test the updated orn
+                    with torch.no_grad():
+                        o[:, 3:6] = updated_orn
+                        input_tensor = self._agent._preproc_inputs(o, g, device='cuda')
+                        predicted_next_action = self._agent.actor(input_tensor)
+                        value_new = self._agent.critic_target(input_tensor, predicted_next_action)
+                        if value_new.item() > value.item():
+                            # print(f'before update: {value.item()}')
+                            # print(f'before update: {update_orn}')
+                            # print(f'after update: {value_new.item()}')
+                            # print(f'after update: {updated_orn}')
+                            update_orn = updated_orn.clone().detach()
+                        else:
+                            break
+                desired_orn = update_orn.clone().detach().unsqueeze(0)
+
+                # use fixed desired orientation
+                # desired_orn = [0.0, 0.0, 1.0]  # vector_to_euler(needle_rel_pos)
+                # desired_orn = torch.tensor(desired_orn).unsqueeze(0).to(self.device).float()
+
+                # use waypoint orientation
+                # desired_orn = torch.tensor(self._obs['observation'][-3:]).unsqueeze(0).to(self.device).float()
+
+                # use rl policy to predict the desired orientation
+                # temp_obs = copy.deepcopy(self._obs)
+                # temp_obs['observation'][0:3] = pred_next_position.cpu().numpy()
+                # pred_action = self._env.action_space.sample(
+                #     ) if random_act else self.sample_action(temp_obs, is_train)
+                #
+                # # Get desired next orientation
+                # self.CLF.u = torch.tensor(pred_action[3].reshape(1, 1)).to(self.device).float()
+                # desired_orn = odeint(self.CLF, orn_x0, tt)[1, :, :]
+
+                # ------------use desired orientation------------
+                with torch.no_grad():
+                    orn_x0 = torch.tensor(
+                        self._obs['observation'][3:6]).unsqueeze(0).to(self.device).float()
+
                     # 0.05 is scaling for needlepick only
                     orn_u0 = np.deg2rad(30) * \
                         torch.tensor(action[3]).unsqueeze(0).to(self.device).float()
-                        
+
                     clf_out = self.CLF.net(orn_x0)  # [1, 6]
 
                     # \dot{x} = f(x) + g(x) * u
@@ -127,16 +194,10 @@ class Sampler:
                     gx = clf_out[:, 3:]  # [1, 3]
 
                     modified_orn = self.CLF.dCLF(orn_x0, desired_orn, orn_u0, fx, gx)
-                    
+
                     # Remember to scale back the action before input into gym environment
                     action[3] = modified_orn.cpu().numpy() / np.deg2rad(30)
-                
 
-            # Display whether the tip of the psm has touch the obstacle or not
-            # True : Collide
-            # False: Safe
-            print(np.sum((self._obs['observation'][0:3] -
-                  np.array([2.66255212, -0.00543937, 3.49126458])) ** 2) < 0.025 ** 2)
 
             obs, reward, done, info = self._env.step(action)
             episode.append(AttrDict(
