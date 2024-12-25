@@ -99,7 +99,7 @@ class CBF(nn.Module):
 
         return out
 
-    def dCBF(self, robot, u, f, g1, g2, g3):
+    def dCBF(self, robot, u, f, g1, g2, g3, constraint_center):
         """Enforce CBF on action
 
         Args:
@@ -114,7 +114,8 @@ class CBF(nn.Module):
         x, y, z = robot[0, 0], robot[0, 1], robot[0, 2]
 
         # Obstacle point position
-        x0, y0, z0 = 2.66255212, -0.00543937, 3.49126458
+        # x0, y0, z0 = 2.66255212, -0.00543937, 3.49126458
+        x0, y0, z0 = constraint_center
 
         # Radius
         # Radius = 5 * URDF's radius

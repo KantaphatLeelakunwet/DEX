@@ -15,6 +15,10 @@ import PIL.Image as Image
 from vec2orn import vector_to_euler
 import copy
 
+from surrol.utils.pybullet_utils import (
+    get_link_pose,
+)
+
 
 class Sampler:
     """Collects rollouts from the environment using the given agent."""
@@ -81,8 +85,11 @@ class Sampler:
                 # Display whether the tip of the psm has touch the obstacle or not
                 # True : Collide
                 # False: Safe
+
+                # load the constraint center from the env
+                constraint_center, _ = get_link_pose(self._env.obj_ids['fixed'][1], -1)
                 constraint = np.sum((self._obs['observation'][0:3] -
-                                     np.array([2.66255212, -0.00543937, 3.49126458])) ** 2) < 0.025 ** 2
+                                     np.array(constraint_center)) ** 2) < 0.025 ** 2
                 violate_constraint = violate_constraint or constraint
                 if violate_constraint:
                     print(f'warning: violate the constraint at episode step {self._episode_step}')
@@ -102,7 +109,7 @@ class Sampler:
                     gx = cbf_out[:, 3:]  # [1, 9]
 
                     g1, g2, g3 = torch.chunk(gx, 3, dim=-1)  # [1, 3]
-                    modified_action = self.CBF.dCBF(x0, u0, fx, g1, g2, g3)
+                    modified_action = self.CBF.dCBF(x0, u0, fx, g1, g2, g3, constraint_center)
 
                     # Remember to scale back the action before input into gym environment
                     action[0:3] = modified_action.cpu().numpy() / 0.05
