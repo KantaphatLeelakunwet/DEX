@@ -26,7 +26,7 @@ parser = argparse.ArgumentParser('Data Processing')
 parser.add_argument(
     '--task',
     type=str,
-    choices=['NeedlePick-v0', 'NeedleRegrasp-v0'],
+    choices=['NeedlePick-v0', 'GauzeRetrieve-v0', 'NeedleReach-v0', 'PegTransfer-v0'],
     default='NeedlePick-v0'
 )
 args = parser.parse_args()
