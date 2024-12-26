@@ -85,11 +85,18 @@ class Sampler:
                 # Display whether the tip of the psm has touch the obstacle or not
                 # True : Collide
                 # False: Safe
-
-                # load the constraint center from the env
-                constraint_center, _ = get_link_pose(self._env.obj_ids['fixed'][1], -1)
-                constraint = np.sum((self._obs['observation'][0:3] -
-                                     np.array(constraint_center)) ** 2) < 0.025 ** 2
+                if self.cfg.dcbf_constraint_type == 1:
+                    # sphere constraint
+                    # load the constraint center from the env
+                    constraint_center, _ = get_link_pose(self._env.obj_ids['obstacle'][0], -1)
+                    constraint = self.CBF.constraint_valid(constraint_type=self.cfg.dcbf_constraint_type,
+                                           robot=self._obs['observation'][0:3], constraint_center=constraint_center)
+                elif self.cfg.dcbf_constraint_type == 2:
+                    # surface constraint
+                    point, _ = get_link_pose(self._env.obj_ids['obstacle'][0], -1)
+                    normal_vector = [0, 0, 1]
+                    constraint = self.CBF.constraint_valid(constraint_type=self.cfg.dcbf_constraint_type,
+                               robot=self._obs['observation'][0:3], point=point, normal_vector=normal_vector)
                 violate_constraint = violate_constraint or constraint
                 if violate_constraint:
                     print(f'warning: violate the constraint at episode step {self._episode_step}')
@@ -109,7 +116,10 @@ class Sampler:
                     gx = cbf_out[:, 3:]  # [1, 9]
 
                     g1, g2, g3 = torch.chunk(gx, 3, dim=-1)  # [1, 3]
-                    modified_action = self.CBF.dCBF(x0, u0, fx, g1, g2, g3, constraint_center)
+                    if self.cfg.dcbf_constraint_type == 1:
+                        modified_action = self.CBF.dCBF_sphere(x0, u0, fx, g1, g2, g3, constraint_center)
+                    elif self.cfg.dcbf_constraint_type == 2:
+                        modified_action = self.CBF.dCBF_surface(x0, u0, fx, g1, g2, g3, point, normal_vector)
 
                     # Remember to scale back the action before input into gym environment
                     action[0:3] = modified_action.cpu().numpy() / 0.05

@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 
 from cvxopt import solvers, matrix
+import math
 
 # # Load dataset
 # obs = np.load('./data/obs3.npy')  # [100, 51, 19]
@@ -58,6 +59,13 @@ class CBF(nn.Module):
             if torch.cuda.is_available() else 'cpu'
         )
 
+        # constraint
+        # val = 5 * URDF's val
+        # Radius of the sphere
+        # Distance to the surface
+        self.r = 0.05
+        self.d = 0.05
+
     def forward(self, t, x):
         # x.shape = [20, 1, 3]
         if self.training:
@@ -99,7 +107,22 @@ class CBF(nn.Module):
 
         return out
 
-    def dCBF(self, robot, u, f, g1, g2, g3, constraint_center):
+    def constraint_valid(self, constraint_type, robot, constraint_center=None, point=None, normal_vector=None):
+        # Assign robot state
+        x, y, z = robot[0], robot[1], robot[2]
+
+        if constraint_type == 1:
+            x0, y0, z0 = constraint_center
+            b = (x - x0) ** 2 + (y - y0) ** 2 + (z - z0) ** 2 - self.r ** 2
+        else:
+            x0, y0, z0 = point
+            a0, b0, c0 = normal_vector
+            norm_score = math.sqrt(a0 ** 2 + b0 ** 2 + c0 ** 2)
+            a0, b0, c0 = a0 / norm_score, b0 / norm_score, c0 / norm_score
+            b = (a0 * (x - x0) + b0 * (y - y0) + c0 * (z - z0)) ** 2 - self.d ** 2
+        return b <= 0
+
+    def dCBF_sphere(self, robot, u, f, g1, g2, g3, constraint_center):
         """Enforce CBF on action
 
         Args:
@@ -117,9 +140,7 @@ class CBF(nn.Module):
         # x0, y0, z0 = 2.66255212, -0.00543937, 3.49126458
         x0, y0, z0 = constraint_center
 
-        # Radius
-        # Radius = 5 * URDF's radius
-        r = 0.05
+        r = self.r
 
         # Compute barrier function
         b = (x - x0) ** 2 + (y - y0) ** 2 + (z - z0) ** 2 - r ** 2
@@ -131,6 +152,60 @@ class CBF(nn.Module):
         Lgb = 2 * (x - x0) * g1 \
             + 2 * (y - y0) * g2 \
             + 2 * (z - z0) * g3
+
+        gamma = 1
+        b_safe = Lfb + gamma * b
+        A_safe = -Lgb
+
+        dim = g1.shape[1]  # = 3
+        G = A_safe.to(self.device)
+        h = b_safe.unsqueeze(0).to(self.device)  # [1, 1]?
+        P = torch.eye(dim).to(self.device)  # [3, 3]
+        q = -u.T  # [3, 1]
+
+        # NOTE: different x from above now
+        x = cvx_solver(P.double(), q.double(), G.double(), h.double())
+
+        out = []
+        for i in range(dim):
+            out.append(x[i])
+        out = np.array(out)
+        out = torch.tensor(out).float().to(self.device)
+        out = out.unsqueeze(0)
+        return out
+
+    def dCBF_surface(self, robot, u, f, g1, g2, g3, point, normal_vector):
+        """Enforce CBF on action
+
+        Args:
+            robot  ([1, 3]): robot state
+            u  ([1, 3]): action
+            f  ([1, 3]): fx
+            g1 ([1, 3]): first row of gx
+            g2 ([1, 3]): second row of gx
+            g3 ([1, 3]): third row of gx
+        """
+        # Assign robot state
+        x, y, z = robot[0, 0], robot[0, 1], robot[0, 2]
+
+        # Obstacle is a surface defined by a point on the surface and the normal vector
+        x0, y0, z0 = point
+        a0, b0, c0 = normal_vector
+        norm_score = math.sqrt(a0**2+b0**2+c0**2)
+        a0, b0, c0 = a0/norm_score, b0/norm_score, c0/norm_score
+
+        d = self.d
+
+        # Compute barrier function
+        b = (a0 * (x - x0) + b0 * (y - y0) + c0 * (z - z0)) ** 2 - d ** 2
+
+        Lfb = 2 * a0 * (a0 * (x - x0) + b0 * (y - y0) + c0 * (z - z0)) * f[0, 0] \
+            + 2 * b0 * (a0 * (x - x0) + b0 * (y - y0) + c0 * (z - z0)) * f[0, 1] \
+            + 2 * c0 * (a0 * (x - x0) + b0 * (y - y0) + c0 * (z - z0)) * f[0, 2]
+
+        Lgb = 2 * a0 * (a0 * (x - x0) + b0 * (y - y0) + c0 * (z - z0)) * g1 \
+            + 2 * b0 * (a0 * (x - x0) + b0 * (y - y0) + c0 * (z - z0)) * g2 \
+            + 2 * c0 * (a0 * (x - x0) + b0 * (y - y0) + c0 * (z - z0)) * g3
 
         gamma = 1
         b_safe = Lfb + gamma * b
