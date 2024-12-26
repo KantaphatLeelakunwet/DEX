@@ -34,6 +34,9 @@ args = parser.parse_args()
 # Create a directory to store data
 if not os.path.exists(args.task):
     os.makedirs(args.task)
+else:
+    print(f"Directory {args.task} already exists.")
+    exit(0)
 
 # Load raw export demonstration data
 data = np.load(

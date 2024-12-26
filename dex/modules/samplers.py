@@ -87,7 +87,7 @@ class Sampler:
                 # False: Safe
 
                 # load the constraint center from the env
-                constraint_center, _ = get_link_pose(self._env.obj_ids['fixed'][1], -1)
+                constraint_center, _ = get_link_pose(self._env.obj_ids['obstacle'][0], -1)
                 constraint = np.sum((self._obs['observation'][0:3] -
                                      np.array(constraint_center)) ** 2) < 0.025 ** 2
                 violate_constraint = violate_constraint or constraint
