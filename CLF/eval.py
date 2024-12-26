@@ -5,11 +5,13 @@ import torch
 from torchdiffeq import odeint
 from clf import CLF
 
+tasks = ['NeedlePick-v0', 'GauzeRetrieve-v0',
+         'NeedleReach-v0', 'PegTransfer-v0']
+
 parser = argparse.ArgumentParser('ODE demo')
 parser.add_argument('--method', type=str,
                     choices=['dopri5', 'adams'], default='dopri5')
-parser.add_argument('--task', type=str,
-                    choices=['NeedlePick-v0', 'NeedleRegrasp-v0'], default='NeedlePick-v0')
+parser.add_argument('--task', type=str, choices=tasks, default='NeedlePick-v0')
 parser.add_argument('--data_size', type=int, default=50)
 parser.add_argument('--gpu', type=int, default=0)
 parser.add_argument('--use_dclf', action='store_true')
@@ -27,7 +29,7 @@ device = torch.device(
 obs = np.load(f'../Data/{args.task}/obs_orn.npy')  # [100, 51, 4]
 obs = obs[:, :, 0:3]  # [100, 51, 3]
 obs = torch.tensor(obs).float()
-SCALING = 5.0
+    
 acs = np.load(f'../Data/{args.task}/acs_orn.npy')  # [100, 50 ,2]
 acs = acs[:, :, 0] * np.deg2rad(30)  # [100, 50, 1]
 acs = acs.reshape((100, 50, 1))

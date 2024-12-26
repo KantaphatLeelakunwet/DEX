@@ -89,7 +89,7 @@ class Sampler:
                 # load the constraint center from the env
                 constraint_center, _ = get_link_pose(self._env.obj_ids['obstacle'][0], -1)
                 constraint = np.sum((self._obs['observation'][0:3] -
-                                     np.array(constraint_center)) ** 2) < 0.025 ** 2
+                                     np.array(constraint_center)) ** 2) < 0.05 ** 2
                 violate_constraint = violate_constraint or constraint
                 if violate_constraint:
                     print(f'warning: violate the constraint at episode step {self._episode_step}')
