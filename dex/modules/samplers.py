@@ -43,12 +43,12 @@ class Sampler:
         # Initialize neuralODE for CBF (Evaluation ONLY)
         self.CBF = CBF([3, 64, 12]).to(self.device)
         self.CBF.load_state_dict(torch.load(
-            "./CBF/saved_model/NeedlePick-v0/0/CBF10.pth"))
+            f"./CBF/saved_model/{self.cfg.task[0:-1]}0/0/CBF10.pth"))
         self.CBF.eval()
         
         self.CLF = CLF([3, 64, 6]).to(self.device)
         self.CLF.load_state_dict(torch.load(
-            "./CLF/saved_model/NeedlePick-v0/0/CLF10.pth"))
+            f"./CLF/saved_model/{self.cfg.task[0:-1]}0/0/CLF10.pth"))
         self.CLF.eval()
 
         self.dcbf_constraint_type = int(self.cfg.task[-1])
@@ -69,6 +69,7 @@ class Sampler:
         # variable related to odeint in cbf and clf
         tt = torch.tensor([0., 0.1]).to(self.device)
 
+        # NOTE: Must change while loop's condition back to run train.py normally
         # while not done and self._episode_step < self._max_episode_len:
         # Each step is 0.1 s, 100 steps is 10 s.
         while self._episode_step < self.cfg.max_episode_steps:
@@ -105,11 +106,14 @@ class Sampler:
                 violate_constraint = self.CBF.constraint_valid(constraint_type=self.dcbf_constraint_type,
                                                                robot=self._obs['observation'][0:3], point=point,
                                                                normal_vector=normal_vector)
+            else:
+                violate_constraint = False
+                
             if violate_constraint:
                 print(f'warning: violate the constraint at episode step {self._episode_step}')
 
             # ===================== CBF =====================
-            if self.cfg.use_dcbf:
+            if self.cfg.use_dcbf and self.dcbf_constraint_type != 0:
                 with torch.no_grad():
                     x0 = torch.tensor(
                         self._obs['observation'][0:3]).unsqueeze(0).to(self.device).float()
@@ -129,12 +133,12 @@ class Sampler:
                         modified_action = self.CBF.dCBF_sphere(x0, u0, fx, g1, g2, g3, constraint_center)
                     elif self.dcbf_constraint_type == 2:
                         modified_action = self.CBF.dCBF_surface(x0, u0, fx, g1, g2, g3, point, normal_vector)
-
+                        
                     # Remember to scale back the action before input into gym environment
                     action[0:3] = modified_action.cpu().numpy() / 0.05
 
             # ===================== CLF =====================
-            if self.cfg.use_dclf:
+            if self.cfg.use_dclf and self.dcbf_constraint_type != 0:
                 assert self.cfg.use_dcbf
                 with torch.no_grad():
                     # predicted next position given the modified action

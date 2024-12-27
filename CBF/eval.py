@@ -5,11 +5,13 @@ import torch
 from torchdiffeq import odeint
 from cbf import CBF
 
+tasks = ['NeedlePick-v0', 'GauzeRetrieve-v0',
+         'NeedleReach-v0', 'PegTransfer-v0']
+
 parser = argparse.ArgumentParser('ODE demo')
 parser.add_argument('--method', type=str,
                     choices=['dopri5', 'adams'], default='dopri5')
-parser.add_argument('--task', type=str,
-                    choices=['NeedlePick-v0', 'NeedleRegrasp-v0'], default='NeedlePick-v0')
+parser.add_argument('--task', type=str, choices=tasks, default='NeedlePick-v0')
 parser.add_argument('--data_size', type=int, default=50)
 parser.add_argument('--gpu', type=int, default=0)
 parser.add_argument('--use_dcbf', action='store_true')
@@ -26,7 +28,12 @@ device = torch.device(
 # Load dataset
 obs = np.load(f'../Data/{args.task}/obs_pos.npy')  # [100, 51, 19]
 obs = torch.tensor(obs).float()
-SCALING = 5.0
+
+if args.task in tasks:
+    SCALING = 5.0
+else:
+    SCALING = 1.0
+    
 acs = np.load(f'../Data/{args.task}/acs_pos.npy')  # [100, 50 ,5]
 acs = acs * 0.01 * SCALING  # [100, 50, 3]
 acs = torch.tensor(acs).float()

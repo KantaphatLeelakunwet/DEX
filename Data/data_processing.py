@@ -26,7 +26,8 @@ parser = argparse.ArgumentParser('Data Processing')
 parser.add_argument(
     '--task',
     type=str,
-    choices=['NeedlePick-v0', 'GauzeRetrieve-v0', 'NeedleReach-v0', 'PegTransfer-v0'],
+    choices=['NeedlePick-v0', 'GauzeRetrieve-v0',
+             'NeedleReach-v0', 'PegTransfer-v0'],
     default='NeedlePick-v0'
 )
 args = parser.parse_args()
@@ -34,10 +35,17 @@ args = parser.parse_args()
 # Create a directory to store data
 if not os.path.exists(args.task):
     os.makedirs(args.task)
+else:
+    # If directory is empty, continue
+    if not any(os.scandir(args.task)):
+        pass
+    else:
+        print(f"Directory {args.task} already exists.")
+        exit(0)
 
 # Load raw export demonstration data
 data = np.load(
-    f'../../SurRoL/surrol/data/demo/data_{args.task}_random_100.npz', allow_pickle=True)
+    f'../SurRoL/surrol/data/demo/data_{args.task}_random_100.npz', allow_pickle=True)
 
 '''
 >>> data.files
@@ -53,6 +61,12 @@ data = np.load(
  'achieved_goal': array([2.69789934, 0.1353316 , 3.41057682]), 
  'desired_goal': array([2.73656776, 0.03006118, 3.576     ])}
 '''
+
+# NOTE: Different tasks have different shape of observation.
+#       This is differentiate by self.has_object.
+#       Single PSM tasks with self.has_object=True have observation of shape 19
+#       Single PSM tasks with self.has_object=False have observation of shape 7
+#       Action shape remains the same for all single PSM tasks.
 
 # Initialize arrays
 obs_pos = np.zeros((100, 51, 3))
