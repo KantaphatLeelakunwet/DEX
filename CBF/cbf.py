@@ -107,20 +107,29 @@ class CBF(nn.Module):
 
         return out
 
-    def constraint_valid(self, constraint_type, robot, constraint_center=None, point=None, normal_vector=None):
+    def constraint_valid(self, constraint_type, robot,
+                         constraint_center=None,
+                         point=None, normal_vector=None,
+                         box_min=None, box_max=None):
         # Assign robot state
         x, y, z = robot[0], robot[1], robot[2]
 
         if constraint_type == 1:
             x0, y0, z0 = constraint_center
             b = (x - x0) ** 2 + (y - y0) ** 2 + (z - z0) ** 2 - self.r ** 2
-        else:
+            violate = (b <= 0)
+        elif constraint_type == 2:
             x0, y0, z0 = point
             a0, b0, c0 = normal_vector
             norm_score = math.sqrt(a0 ** 2 + b0 ** 2 + c0 ** 2)
             a0, b0, c0 = a0 / norm_score, b0 / norm_score, c0 / norm_score
             b = (a0 * (x - x0) + b0 * (y - y0) + c0 * (z - z0)) ** 2 - self.d ** 2
-        return b <= 0
+            violate = (b <= 0)
+        elif constraint_type == 3:
+            xmin, ymin, zmin = box_min
+            xmax, ymax, zmax = box_max
+            violate = (x < xmin) or (x > xmax) or (y < ymin) or (y > ymax) or (z < zmin) or (z > zmax)
+        return violate
 
     def dCBF_sphere(self, robot, u, f, g1, g2, g3, constraint_center):
         """Enforce CBF on action
@@ -159,7 +168,7 @@ class CBF(nn.Module):
 
         dim = g1.shape[1]  # = 3
         G = A_safe.to(self.device)
-        h = b_safe.unsqueeze(0).to(self.device)  # [1, 1]?
+        h = b_safe.unsqueeze(0).to(self.device)  # [1, 1]
         P = torch.eye(dim).to(self.device)  # [3, 3]
         q = -u.T  # [3, 1]
 
@@ -213,7 +222,71 @@ class CBF(nn.Module):
 
         dim = g1.shape[1]  # = 3
         G = A_safe.to(self.device)
-        h = b_safe.unsqueeze(0).to(self.device)  # [1, 1]?
+        h = b_safe.unsqueeze(0).to(self.device)  # [1, 1]
+        P = torch.eye(dim).to(self.device)  # [3, 3]
+        q = -u.T  # [3, 1]
+
+        # NOTE: different x from above now
+        x = cvx_solver(P.double(), q.double(), G.double(), h.double())
+
+        out = []
+        for i in range(dim):
+            out.append(x[i])
+        out = np.array(out)
+        out = torch.tensor(out).float().to(self.device)
+        out = out.unsqueeze(0)
+        return out
+
+    def dCBF_box(self, robot, u, f, g1, g2, g3, box_min, box_max):
+        """Enforce CBF on action
+
+        Args:
+            robot  ([1, 3]): robot state
+            u  ([1, 3]): action
+            f  ([1, 3]): fx
+            g1 ([1, 3]): first row of gx
+            g2 ([1, 3]): second row of gx
+            g3 ([1, 3]): third row of gx
+        """
+        # Assign robot state
+        x, y, z = robot[0, 0], robot[0, 1], robot[0, 2]
+
+        # The agent need to stay in a 3D box defined by its corners
+        xmin, ymin, zmin = box_min
+        xmax, ymax, zmax = box_max
+
+        # Compute barrier function
+        b1 = x - xmin
+        b2 = y - ymin
+        b3 = z - xmin
+        b4 = xmax - x
+        b4 = ymax - y
+        b4 = zmax - z
+        b = torch.tensor([b1, b2, b3, b4, b5, b6]).unsqueeze(1).to(self.device)
+
+        Lfb1 = f[0, 0]
+        Lfb2 = f[0, 1]
+        Lfb3 = f[0, 2]
+        Lfb4 = -f[0, 0]
+        Lfb5 = -f[0, 1]
+        Lfb6 = -f[0, 2]
+        Lfb = torch.tensor([Lfb1, Lfb2, Lfb3, Lfb4, Lfb5, Lfb6]).unsqueeze(1).to(self.device)
+
+        Lgb1 = g1
+        Lgb2 = g2
+        Lgb3 = g3
+        Lgb4 = -g1
+        Lgb5 = -g2
+        Lgb6 = -g3
+        Lgb = torch.tensor([Lgb1, Lgb2, Lgb3, Lgb4, Lgb5, Lgb6]).unsqueeze(1).to(self.device)
+
+        gamma = 1
+        b_safe = Lfb + gamma * b
+        A_safe = -Lgb
+
+        dim = g1.shape[1]  # = 3
+        G = A_safe  # [6, 3]
+        h = b_safe  # [6, 1]
         P = torch.eye(dim).to(self.device)  # [3, 3]
         q = -u.T  # [3, 1]
 
