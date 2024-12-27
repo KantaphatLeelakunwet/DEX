@@ -50,7 +50,7 @@ obs = torch.tensor(obs).float()  # [100, 51, 3]
 # obs[3:6] = orientation in Euler
 # obs[6] = jaw angle
 
-acs = np.load('../Data/{args.task}/acs_orn.npy')  # [100, 50 ,2]
+acs = np.load(f'../Data/{args.task}/acs_orn.npy')  # [100, 50 ,2]
 # acs[3] = d_yaw / d_pitch
 # acs[4] = jaw open > 0, otherwise close
 

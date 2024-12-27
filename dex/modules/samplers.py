@@ -66,6 +66,7 @@ class Sampler:
         # detect constraint violation
         violate_constraint = False
 
+        # NOTE: Must change while loop's condition back to run train.py normally
         # while not done and self._episode_step < self._max_episode_len:
         # Each step is 0.1 s, 100 steps is 10 s.
         while self._episode_step < self.cfg.max_episode_steps:
