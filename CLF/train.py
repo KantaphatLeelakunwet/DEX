@@ -10,13 +10,15 @@ from clf import CLF
 
 torch.autograd.set_detect_anomaly(True)
 
+tasks = ['NeedlePick-v0', 'GauzeRetrieve-v0',
+         'NeedleReach-v0', 'PegTransfer-v0']
+
 parser = argparse.ArgumentParser('ODE demo')
 parser.add_argument('--method', type=str,
                     choices=['dopri8', 'adams'], default='dopri8')  # dopri5
 parser.add_argument('--activation', type=str,
                     choices=['gelu', 'silu', 'tanh'], default='gelu')
-parser.add_argument('--task', type=str,
-                    choices=['NeedlePick-v0', 'NeedleRegrasp-v0'], default='NeedlePick-v0')
+parser.add_argument('--task', type=str, choices=tasks, default='NeedlePick-v0')
 # length of each trajectory
 parser.add_argument('--data_size', type=int, default=50)
 parser.add_argument('--batch_time', type=int, default=10)
@@ -48,12 +50,7 @@ obs = torch.tensor(obs).float()  # [100, 51, 3]
 # obs[3:6] = orientation in Euler
 # obs[6] = jaw angle
 
-if args.task == 'NeedlePick-v0':
-    SCALING = 5.0
-else:
-    SCALING = 1.0
-
-acs = np.load('../Data/{args.task}/acs_orn.npy')  # [100, 50 ,2]
+acs = np.load(f'../Data/{args.task}/acs_orn.npy')  # [100, 50 ,2]
 # acs[3] = d_yaw / d_pitch
 # acs[4] = jaw open > 0, otherwise close
 

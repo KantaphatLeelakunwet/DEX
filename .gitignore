@@ -78,4 +78,5 @@ saved_eval_pic/
 *.mp4
 
 ## Datasets
-Data/NeedlePick-v0/
+Data/
+!Data/data_processing.py
