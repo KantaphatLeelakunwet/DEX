@@ -43,12 +43,12 @@ class Sampler:
         # Initialize neuralODE for CBF (Evaluation ONLY)
         self.CBF = CBF([3, 64, 12]).to(self.device)
         self.CBF.load_state_dict(torch.load(
-            "./CBF/saved_model/NeedlePick-v0/0/CBF10.pth"))
+            f"./CBF/saved_model/{self.cfg.task}/0/CBF10.pth"))
         self.CBF.eval()
         
         self.CLF = CLF([3, 64, 6]).to(self.device)
         self.CLF.load_state_dict(torch.load(
-            "./CLF/saved_model/NeedlePick-v0/0/CLF10.pth"))
+            f"./CLF/saved_model/{self.cfg.task}/0/CLF10.pth"))
         self.CLF.eval()
 
         self.dcbf_constraint_type = int(self.cfg.task[-1])
@@ -88,6 +88,8 @@ class Sampler:
             # Display whether the tip of the psm has touch the obstacle or not
             # True : Collide
             # False: Safe
+            violate_constraint = False
+            
             if self.dcbf_constraint_type == 1:
                 # sphere constraint
                 # load the constraint center from the env
