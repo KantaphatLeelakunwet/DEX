@@ -64,7 +64,7 @@ class CBF(nn.Module):
         # Radius of the sphere
         # Distance to the surface
         self.r = 0.05
-        self.d = 0.05
+        self.d = 0.01
 
     def forward(self, t, x):
         # x.shape = [20, 1, 3]

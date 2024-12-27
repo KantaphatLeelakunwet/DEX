@@ -19,6 +19,8 @@ from surrol.utils.pybullet_utils import (
     get_link_pose,
 )
 
+from scipy.spatial.transform import Rotation
+
 
 class Sampler:
     """Collects rollouts from the environment using the given agent."""
@@ -49,6 +51,9 @@ class Sampler:
             "./CLF/saved_model/NeedlePick-v0/0/CLF10.pth"))
         self.CLF.eval()
 
+        self.dcbf_constraint_type = int(self.cfg.task[-1])
+        print(f'constraint type is {self.dcbf_constraint_type}')
+
     def init(self):
         """Starts a new rollout. Render indicates whether output should contain image."""
         self._episode_reset()
@@ -63,8 +68,6 @@ class Sampler:
 
         # variable related to odeint in cbf and clf
         tt = torch.tensor([0., 0.1]).to(self.device)
-        # detect constraint violation
-        violate_constraint = False
 
         # while not done and self._episode_step < self._max_episode_len:
         # Each step is 0.1 s, 100 steps is 10 s.
@@ -80,27 +83,33 @@ class Sampler:
                     os.mkdir("saved_eval_pic")
                 img.save(f'saved_eval_pic/image_{self._episode_step}.png')
 
+            # ===================== constraint test =====================
+            # Display whether the tip of the psm has touch the obstacle or not
+            # True : Collide
+            # False: Safe
+            if self.dcbf_constraint_type == 1:
+                # sphere constraint
+                # load the constraint center from the env
+                constraint_center, _ = get_link_pose(self._env.obj_ids['obstacle'][0], -1)
+                violate_constraint = self.CBF.constraint_valid(constraint_type=self.dcbf_constraint_type,
+                                                               robot=self._obs['observation'][0:3],
+                                                               constraint_center=constraint_center)
+            elif self.dcbf_constraint_type == 2:
+                # surface constraint
+                point, surface_ori = get_link_pose(self._env.obj_ids['obstacle'][0], -1)
+                rot = Rotation.from_quat(np.array(surface_ori))
+                # print(rot.as_euler('xyz'))
+                original_normal_vector = np.array([0, 1, 0]).reshape([3, 1])
+                normal_vector = (rot.as_matrix() @ original_normal_vector).reshape(-1).tolist()
+                # print(normal_vector)
+                violate_constraint = self.CBF.constraint_valid(constraint_type=self.dcbf_constraint_type,
+                                                               robot=self._obs['observation'][0:3], point=point,
+                                                               normal_vector=normal_vector)
+            if violate_constraint:
+                print(f'warning: violate the constraint at episode step {self._episode_step}')
+
             # ===================== CBF =====================
             if self.cfg.use_dcbf:
-                # Display whether the tip of the psm has touch the obstacle or not
-                # True : Collide
-                # False: Safe
-                if self.cfg.dcbf_constraint_type == 1:
-                    # sphere constraint
-                    # load the constraint center from the env
-                    constraint_center, _ = get_link_pose(self._env.obj_ids['obstacle'][0], -1)
-                    constraint = self.CBF.constraint_valid(constraint_type=self.cfg.dcbf_constraint_type,
-                                           robot=self._obs['observation'][0:3], constraint_center=constraint_center)
-                elif self.cfg.dcbf_constraint_type == 2:
-                    # surface constraint
-                    point, _ = get_link_pose(self._env.obj_ids['obstacle'][0], -1)
-                    normal_vector = [0, 0, 1]
-                    constraint = self.CBF.constraint_valid(constraint_type=self.cfg.dcbf_constraint_type,
-                               robot=self._obs['observation'][0:3], point=point, normal_vector=normal_vector)
-                violate_constraint = violate_constraint or constraint
-                if violate_constraint:
-                    print(f'warning: violate the constraint at episode step {self._episode_step}')
-
                 with torch.no_grad():
                     x0 = torch.tensor(
                         self._obs['observation'][0:3]).unsqueeze(0).to(self.device).float()
@@ -116,9 +125,9 @@ class Sampler:
                     gx = cbf_out[:, 3:]  # [1, 9]
 
                     g1, g2, g3 = torch.chunk(gx, 3, dim=-1)  # [1, 3]
-                    if self.cfg.dcbf_constraint_type == 1:
+                    if self.dcbf_constraint_type == 1:
                         modified_action = self.CBF.dCBF_sphere(x0, u0, fx, g1, g2, g3, constraint_center)
-                    elif self.cfg.dcbf_constraint_type == 2:
+                    elif self.dcbf_constraint_type == 2:
                         modified_action = self.CBF.dCBF_surface(x0, u0, fx, g1, g2, g3, point, normal_vector)
 
                     # Remember to scale back the action before input into gym environment
