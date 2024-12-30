@@ -258,10 +258,10 @@ class CBF(nn.Module):
         # Compute barrier function
         b1 = x - xmin
         b2 = y - ymin
-        b3 = z - xmin
+        b3 = z - zmin
         b4 = xmax - x
-        b4 = ymax - y
-        b4 = zmax - z
+        b5 = ymax - y
+        b6 = zmax - z
         b = torch.tensor([b1, b2, b3, b4, b5, b6]).unsqueeze(1).to(self.device)
 
         Lfb1 = f[0, 0]
@@ -278,7 +278,7 @@ class CBF(nn.Module):
         Lgb4 = -g1
         Lgb5 = -g2
         Lgb6 = -g3
-        Lgb = torch.tensor([Lgb1, Lgb2, Lgb3, Lgb4, Lgb5, Lgb6]).unsqueeze(1).to(self.device)
+        Lgb = torch.cat((Lgb1, Lgb2, Lgb3, Lgb4, Lgb5, Lgb6)).to(self.device)
 
         gamma = 1
         b_safe = Lfb + gamma * b

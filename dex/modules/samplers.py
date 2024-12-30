@@ -124,15 +124,15 @@ class Sampler:
                 corner = np.stack(corner, axis=1)
                 corner_max = np.max(corner, axis=1).reshape(-1)
                 corner_min = np.min(corner, axis=1).reshape(-1)
-                print(corner)
-                print(corner_max)
-                print(corner_min)
+                # print(corner)
+                # print(corner_max)
+                # print(corner_min)
 
                 box_min = np.array(point)+corner_min
                 box_max = np.array(point)+corner_max
-                print(box_max)
-                print(box_min)
-                print(self._obs['observation'][0:3])
+                # print(box_max)
+                # print(box_min)
+                # print(self._obs['observation'][0:3])
                 violate_constraint = self.CBF.constraint_valid(constraint_type=self.dcbf_constraint_type,
                                                                robot=self._obs['observation'][0:3],
                                                                box_min=box_min.tolist(),
@@ -164,7 +164,8 @@ class Sampler:
                         modified_action = self.CBF.dCBF_sphere(x0, u0, fx, g1, g2, g3, constraint_center)
                     elif self.dcbf_constraint_type == 2:
                         modified_action = self.CBF.dCBF_surface(x0, u0, fx, g1, g2, g3, point, normal_vector)
-                        
+                    elif self.dcbf_constraint_type == 3:
+                        modified_action = self.CBF.dCBF_box(x0, u0, fx, g1, g2, g3, box_min, box_max)
                     # Remember to scale back the action before input into gym environment
                     action[0:3] = modified_action.cpu().numpy() / 0.05
 
