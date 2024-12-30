@@ -98,14 +98,45 @@ class Sampler:
             elif self.dcbf_constraint_type == 2:
                 # surface constraint
                 point, surface_ori = get_link_pose(self._env.obj_ids['obstacle'][0], -1)
-                rot = Rotation.from_quat(np.array(surface_ori))
+                rot_matrix = Rotation.from_quat(np.array(surface_ori)).as_matrix()
                 # print(rot.as_euler('xyz'))
                 original_normal_vector = np.array([0, 1, 0]).reshape([3, 1])
-                normal_vector = (rot.as_matrix() @ original_normal_vector).reshape(-1).tolist()
+                normal_vector = (rot_matrix @ original_normal_vector).reshape(-1).tolist()
                 # print(normal_vector)
                 violate_constraint = self.CBF.constraint_valid(constraint_type=self.dcbf_constraint_type,
                                                                robot=self._obs['observation'][0:3], point=point,
                                                                normal_vector=normal_vector)
+            elif self.dcbf_constraint_type == 3:
+                # box constraint
+                point, box_ori = get_link_pose(self._env.obj_ids['obstacle'][0], -1)
+                rot_matrix = Rotation.from_quat(np.array(box_ori)).as_matrix()
+                box_size = np.array([0.25, 0.25, 0.25])/2
+                corner = []
+                corner.append(rot_matrix @ np.array([box_size[0], box_size[1], -box_size[2]]).reshape([3, 1]))
+                corner.append(rot_matrix @ np.array([box_size[0], box_size[1], box_size[2]]).reshape([3, 1]))
+                corner.append(rot_matrix @ np.array([box_size[0], -box_size[1], -box_size[2]]).reshape([3, 1]))
+                corner.append(rot_matrix @ np.array([box_size[0], -box_size[1], box_size[2]]).reshape([3, 1]))
+                corner.append(rot_matrix @ np.array([-box_size[0], box_size[1], -box_size[2]]).reshape([3, 1]))
+                corner.append(rot_matrix @ np.array([-box_size[0], box_size[1], box_size[2]]).reshape([3, 1]))
+                corner.append(rot_matrix @ np.array([-box_size[0], -box_size[1], -box_size[2]]).reshape([3, 1]))
+                corner.append(rot_matrix @ np.array([-box_size[0], -box_size[1], box_size[2]]).reshape([3, 1]))
+                # 3*8
+                corner = np.stack(corner, axis=1)
+                corner_max = np.max(corner, axis=1).reshape(-1)
+                corner_min = np.min(corner, axis=1).reshape(-1)
+                print(corner)
+                print(corner_max)
+                print(corner_min)
+
+                box_min = np.array(point)+corner_min
+                box_max = np.array(point)+corner_max
+                print(box_max)
+                print(box_min)
+                print(self._obs['observation'][0:3])
+                violate_constraint = self.CBF.constraint_valid(constraint_type=self.dcbf_constraint_type,
+                                                               robot=self._obs['observation'][0:3],
+                                                               box_min=box_min.tolist(),
+                                                               box_max=box_max.tolist())
             else:
                 violate_constraint = False
                 
