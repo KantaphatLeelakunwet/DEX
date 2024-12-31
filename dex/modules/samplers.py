@@ -19,6 +19,7 @@ from surrol.utils.pybullet_utils import (
     get_link_pose,
 )
 
+import pybullet as p
 from scipy.spatial.transform import Rotation
 
 
@@ -110,7 +111,7 @@ class Sampler:
                 # box constraint
                 point, box_ori = get_link_pose(self._env.obj_ids['obstacle'][0], -1)
                 rot_matrix = Rotation.from_quat(np.array(box_ori)).as_matrix()
-                box_size = np.array([0.25, 0.25, 0.25])/2
+                box_size = self._env.obj_size['obstacle'][0]
                 corner = []
                 corner.append(rot_matrix @ np.array([box_size[0], box_size[1], -box_size[2]]).reshape([3, 1]))
                 corner.append(rot_matrix @ np.array([box_size[0], box_size[1], box_size[2]]).reshape([3, 1]))
