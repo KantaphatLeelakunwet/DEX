@@ -111,16 +111,16 @@ class Sampler:
                 # box constraint
                 point, box_ori = get_link_pose(self._env.obj_ids['obstacle'][0], -1)
                 rot_matrix = Rotation.from_quat(np.array(box_ori)).as_matrix()
-                box_size = self._env.obj_size['obstacle'][0]
+                box_size = np.array([0.25, 0.25, 0.25])
                 corner = []
-                corner.append(rot_matrix @ np.array([box_size[0], box_size[1], -box_size[2]]).reshape([3, 1]))
-                corner.append(rot_matrix @ np.array([box_size[0], box_size[1], box_size[2]]).reshape([3, 1]))
-                corner.append(rot_matrix @ np.array([box_size[0], -box_size[1], -box_size[2]]).reshape([3, 1]))
-                corner.append(rot_matrix @ np.array([box_size[0], -box_size[1], box_size[2]]).reshape([3, 1]))
-                corner.append(rot_matrix @ np.array([-box_size[0], box_size[1], -box_size[2]]).reshape([3, 1]))
-                corner.append(rot_matrix @ np.array([-box_size[0], box_size[1], box_size[2]]).reshape([3, 1]))
-                corner.append(rot_matrix @ np.array([-box_size[0], -box_size[1], -box_size[2]]).reshape([3, 1]))
-                corner.append(rot_matrix @ np.array([-box_size[0], -box_size[1], box_size[2]]).reshape([3, 1]))
+                corner.append(rot_matrix @ np.array([box_size[0], box_size[1], -box_size[2]]).reshape([3, 1])/2)
+                corner.append(rot_matrix @ np.array([box_size[0], box_size[1], box_size[2]]).reshape([3, 1])/2)
+                corner.append(rot_matrix @ np.array([box_size[0], -box_size[1], -box_size[2]]).reshape([3, 1])/2)
+                corner.append(rot_matrix @ np.array([box_size[0], -box_size[1], box_size[2]]).reshape([3, 1])/2)
+                corner.append(rot_matrix @ np.array([-box_size[0], box_size[1], -box_size[2]]).reshape([3, 1])/2)
+                corner.append(rot_matrix @ np.array([-box_size[0], box_size[1], box_size[2]]).reshape([3, 1])/2)
+                corner.append(rot_matrix @ np.array([-box_size[0], -box_size[1], -box_size[2]]).reshape([3, 1])/2)
+                corner.append(rot_matrix @ np.array([-box_size[0], -box_size[1], box_size[2]]).reshape([3, 1])/2)
                 # 3*8
                 corner = np.stack(corner, axis=1)
                 corner_max = np.max(corner, axis=1).reshape(-1)
@@ -138,6 +138,36 @@ class Sampler:
                                                                robot=self._obs['observation'][0:3],
                                                                box_min=box_min.tolist(),
                                                                box_max=box_max.tolist())
+            elif self.dcbf_constraint_type == 4:
+                # half-sphere constraint
+                center, sphere_ori = get_link_pose(self._env.obj_ids['obstacle'][0], -1)
+                radius = 0.2
+                rot_matrix = Rotation.from_quat(np.array(sphere_ori)).as_matrix()
+                original_normal_vector = np.array([0, 1, 0]).reshape([3, 1])
+                normal_vector = (rot_matrix @ original_normal_vector).reshape(-1).tolist()
+                # for area 0, the agent can stay in area 0 or go to area 1 or area 2
+                # for area 1, the agent can only stay in area 1 or go to area 0
+                # for area 2, the agent can only stay in area 2 or go to area 0
+                if np.dot(normal_vector, np.array(self._obs['observation'][0:3])-np.array(center)) < 0:
+                    out = self.CBF.constraint_valid(constraint_type=self.dcbf_constraint_type,
+                                                        robot=self._obs['observation'][0:3],
+                                                        constraint_center=center,
+                                                        radius=radius)
+                    if out:
+                        current_area = 1
+                    else:
+                        current_area = 2
+                else:
+                    current_area = 0
+                if self._episode_step == 0:
+                    violate_constraint = False
+                else:
+                    if last_area + current_area == 3:
+                        # last and current areas are (1, 2) or (2, 1)
+                        violate_constraint = True
+                    else:
+                        violate_constraint = False
+                last_area = current_area
             else:
                 violate_constraint = False
                 
@@ -167,6 +197,12 @@ class Sampler:
                         modified_action = self.CBF.dCBF_surface(x0, u0, fx, g1, g2, g3, point, normal_vector)
                     elif self.dcbf_constraint_type == 3:
                         modified_action = self.CBF.dCBF_box(x0, u0, fx, g1, g2, g3, box_min, box_max)
+                    elif self.dcbf_constraint_type == 4:
+                        if current_area > 0:
+                            modified_action = self.CBF.dCBF_half_sphere(x0, u0, fx, g1, g2, g3,
+                                                                        center, radius, current_area)
+                        else:
+                            modified_action = torch.tensor(action[0:3]).to(self.device)*0.05
                     # Remember to scale back the action before input into gym environment
                     action[0:3] = modified_action.cpu().numpy() / 0.05
 

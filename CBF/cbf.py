@@ -110,7 +110,7 @@ class CBF(nn.Module):
     def constraint_valid(self, constraint_type, robot,
                          constraint_center=None,
                          point=None, normal_vector=None,
-                         box_min=None, box_max=None):
+                         box_min=None, box_max=None, radius=None):
         # Assign robot state
         x, y, z = robot[0], robot[1], robot[2]
 
@@ -129,6 +129,10 @@ class CBF(nn.Module):
             xmin, ymin, zmin = box_min
             xmax, ymax, zmax = box_max
             violate = (x < xmin) or (x > xmax) or (y < ymin) or (y > ymax) or (z < zmin) or (z > zmax)
+        elif constraint_type == 4:
+            x0, y0, z0 = constraint_center
+            b = (x - x0) ** 2 + (y - y0) ** 2 + (z - z0) ** 2 - radius ** 2
+            violate = (b > 0)
         return violate
 
     def dCBF_sphere(self, robot, u, f, g1, g2, g3, constraint_center):
@@ -287,6 +291,61 @@ class CBF(nn.Module):
         dim = g1.shape[1]  # = 3
         G = A_safe  # [6, 3]
         h = b_safe  # [6, 1]
+        P = torch.eye(dim).to(self.device)  # [3, 3]
+        q = -u.T  # [3, 1]
+
+        # NOTE: different x from above now
+        x = cvx_solver(P.double(), q.double(), G.double(), h.double())
+
+        out = []
+        for i in range(dim):
+            out.append(x[i])
+        out = np.array(out)
+        out = torch.tensor(out).float().to(self.device)
+        out = out.unsqueeze(0)
+        return out
+
+    def dCBF_half_sphere(self, robot, u, f, g1, g2, g3, center, radius, current_area):
+        """Enforce CBF on action
+
+        Args:
+            robot  ([1, 3]): robot state
+            u  ([1, 3]): action
+            f  ([1, 3]): fx
+            g1 ([1, 3]): first row of gx
+            g2 ([1, 3]): second row of gx
+            g3 ([1, 3]): third row of gx
+        """
+        # Assign robot state
+        x, y, z = robot[0, 0], robot[0, 1], robot[0, 2]
+
+        # Obstacle point position
+        x0, y0, z0 = center
+
+        r = radius
+
+        # Compute barrier function
+        b = (x - x0) ** 2 + (y - y0) ** 2 + (z - z0) ** 2 - r ** 2
+
+        Lfb = 2 * (x - x0) * f[0, 0] \
+            + 2 * (y - y0) * f[0, 1] \
+            + 2 * (z - z0) * f[0, 2]
+
+        Lgb = 2 * (x - x0) * g1 \
+            + 2 * (y - y0) * g2 \
+            + 2 * (z - z0) * g3
+
+        gamma = 1
+        if current_area == 1:
+            b_safe = Lfb + gamma * b
+            A_safe = -Lgb
+        elif current_area == 2:
+            b_safe = -(Lfb + gamma * b)
+            A_safe = Lgb
+
+        dim = g1.shape[1]  # = 3
+        G = A_safe.to(self.device)
+        h = b_safe.unsqueeze(0).to(self.device)  # [1, 1]
         P = torch.eye(dim).to(self.device)  # [3, 3]
         q = -u.T  # [3, 1]
 
