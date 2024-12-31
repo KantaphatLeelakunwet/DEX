@@ -68,6 +68,9 @@ class Sampler:
 
         # variable related to odeint in cbf and clf
         tt = torch.tensor([0., 0.1]).to(self.device)
+        
+        # Store number of violations
+        num_violations = 0
 
         # NOTE: Must change while loop's condition back to run train.py normally
         # while not done and self._episode_step < self._max_episode_len:
@@ -141,6 +144,7 @@ class Sampler:
                 violate_constraint = False
                 
             if violate_constraint:
+                num_violations += 1
                 print(f'warning: violate the constraint at episode step {self._episode_step}')
 
             # ===================== CBF =====================
@@ -279,7 +283,7 @@ class Sampler:
         episode[-1].done = True
         rollouts = self._episode_cache.pop()
         assert self._episode_step == self._max_episode_len
-        return listdict2dictlist(episode), rollouts, self._episode_step
+        return listdict2dictlist(episode), rollouts, self._episode_step, num_violations
 
     def _episode_reset(self, global_step=None):
         """Resets sampler at the end of an episode."""
