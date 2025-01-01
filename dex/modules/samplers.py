@@ -110,32 +110,19 @@ class Sampler:
             elif self.dcbf_constraint_type == 3:
                 # box constraint
                 point, box_ori = get_link_pose(self._env.obj_ids['obstacle'][0], -1)
-                rot_matrix = Rotation.from_quat(np.array(box_ori)).as_matrix()
+                rot = Rotation.from_quat(np.array(box_ori))
+                inv_matrix = rot.inv().as_matrix()
+                original_robot_pos = np.array(self._obs['observation'][0:3]).reshape(3, 1)
+                inv_relative_robot_pos = inv_matrix @ (original_robot_pos-np.array(point).reshape(3, 1))
                 box_size = np.array([0.25, 0.25, 0.25])
-                corner = []
-                corner.append(rot_matrix @ np.array([box_size[0], box_size[1], -box_size[2]]).reshape([3, 1])/2)
-                corner.append(rot_matrix @ np.array([box_size[0], box_size[1], box_size[2]]).reshape([3, 1])/2)
-                corner.append(rot_matrix @ np.array([box_size[0], -box_size[1], -box_size[2]]).reshape([3, 1])/2)
-                corner.append(rot_matrix @ np.array([box_size[0], -box_size[1], box_size[2]]).reshape([3, 1])/2)
-                corner.append(rot_matrix @ np.array([-box_size[0], box_size[1], -box_size[2]]).reshape([3, 1])/2)
-                corner.append(rot_matrix @ np.array([-box_size[0], box_size[1], box_size[2]]).reshape([3, 1])/2)
-                corner.append(rot_matrix @ np.array([-box_size[0], -box_size[1], -box_size[2]]).reshape([3, 1])/2)
-                corner.append(rot_matrix @ np.array([-box_size[0], -box_size[1], box_size[2]]).reshape([3, 1])/2)
-                # 3*8
-                corner = np.stack(corner, axis=1)
-                corner_max = np.max(corner, axis=1).reshape(-1)
-                corner_min = np.min(corner, axis=1).reshape(-1)
-                # print(corner)
-                # print(corner_max)
-                # print(corner_min)
 
-                box_min = np.array(point)+corner_min
-                box_max = np.array(point)+corner_max
+                box_min = -box_size/2
+                box_max = box_size/2
                 # print(box_max)
                 # print(box_min)
                 # print(self._obs['observation'][0:3])
                 violate_constraint = self.CBF.constraint_valid(constraint_type=self.dcbf_constraint_type,
-                                                               robot=self._obs['observation'][0:3],
+                                                               robot=inv_relative_robot_pos.reshape(-1).tolist(),
                                                                box_min=box_min.tolist(),
                                                                box_max=box_max.tolist())
             elif self.dcbf_constraint_type == 4:
@@ -196,7 +183,7 @@ class Sampler:
                     elif self.dcbf_constraint_type == 2:
                         modified_action = self.CBF.dCBF_surface(x0, u0, fx, g1, g2, g3, point, normal_vector)
                     elif self.dcbf_constraint_type == 3:
-                        modified_action = self.CBF.dCBF_box(x0, u0, fx, g1, g2, g3, box_min, box_max)
+                        modified_action = self.CBF.dCBF_box(x0, u0, fx, g1, g2, g3, box_size, inv_matrix, np.array(point))
                     elif self.dcbf_constraint_type == 4:
                         if current_area > 0:
                             modified_action = self.CBF.dCBF_half_sphere(x0, u0, fx, g1, g2, g3,

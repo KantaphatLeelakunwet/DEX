@@ -241,7 +241,7 @@ class CBF(nn.Module):
         out = out.unsqueeze(0)
         return out
 
-    def dCBF_box(self, robot, u, f, g1, g2, g3, box_min, box_max):
+    def dCBF_box(self, robot, u, f, g1, g2, g3, box_size, box_ori_inv_matrix, box_center):
         """Enforce CBF on action
 
         Args:
@@ -255,33 +255,42 @@ class CBF(nn.Module):
         # Assign robot state
         x, y, z = robot[0, 0], robot[0, 1], robot[0, 2]
 
+        # box center
+        x0, y0, z0 = box_center.tolist()
+
         # The agent need to stay in a 3D box defined by its corners
-        xmin, ymin, zmin = box_min
-        xmax, ymax, zmax = box_max
+        xmin, ymin, zmin = -box_size/2
+        xmax, ymax, zmax = box_size/2
 
         # Compute barrier function
-        b1 = x - xmin
-        b2 = y - ymin
-        b3 = z - zmin
-        b4 = xmax - x
-        b5 = ymax - y
-        b6 = zmax - z
+        b1 = box_ori_inv_matrix[0, 0] * (x-x0) + box_ori_inv_matrix[0, 1] * (y-y0) + box_ori_inv_matrix[0, 2] * (z-z0)\
+             - xmin
+        b2 = box_ori_inv_matrix[1, 0] * (x-x0) + box_ori_inv_matrix[1, 1] * (y-y0) + box_ori_inv_matrix[1, 2] * (z-z0)\
+             - ymin
+        b3 = box_ori_inv_matrix[2, 0] * (x-x0) + box_ori_inv_matrix[2, 1] * (y-y0) + box_ori_inv_matrix[2, 2] * (z-z0)\
+             - zmin
+        b4 = xmax -\
+             (box_ori_inv_matrix[0, 0] * (x-x0) + box_ori_inv_matrix[0, 1] * (y-y0) + box_ori_inv_matrix[0, 2] * (z-z0))
+        b5 = ymax -\
+             (box_ori_inv_matrix[1, 0] * (x-x0) + box_ori_inv_matrix[1, 1] * (y-y0) + box_ori_inv_matrix[1, 2] * (z-z0))
+        b6 = zmax -\
+             (box_ori_inv_matrix[2, 0] * (x-x0) + box_ori_inv_matrix[2, 1] * (y-y0) + box_ori_inv_matrix[2, 2] * (z-z0))
         b = torch.tensor([b1, b2, b3, b4, b5, b6]).unsqueeze(1).to(self.device)
 
-        Lfb1 = f[0, 0]
-        Lfb2 = f[0, 1]
-        Lfb3 = f[0, 2]
-        Lfb4 = -f[0, 0]
-        Lfb5 = -f[0, 1]
-        Lfb6 = -f[0, 2]
+        Lfb1 = box_ori_inv_matrix[0, 0] * f[0, 0] + box_ori_inv_matrix[0, 1] * f[0, 1] + box_ori_inv_matrix[0, 2] * f[0, 2]
+        Lfb2 = box_ori_inv_matrix[1, 0] * f[0, 0] + box_ori_inv_matrix[1, 1] * f[0, 1] + box_ori_inv_matrix[1, 2] * f[0, 2]
+        Lfb3 = box_ori_inv_matrix[2, 0] * f[0, 0] + box_ori_inv_matrix[2, 1] * f[0, 1] + box_ori_inv_matrix[2, 2] * f[0, 2]
+        Lfb4 = -(box_ori_inv_matrix[0, 0] * f[0, 0] + box_ori_inv_matrix[0, 1] * f[0, 1] + box_ori_inv_matrix[0, 2] * f[0, 2])
+        Lfb5 = -(box_ori_inv_matrix[1, 0] * f[0, 0] + box_ori_inv_matrix[1, 1] * f[0, 1] + box_ori_inv_matrix[1, 2] * f[0, 2])
+        Lfb6 = -(box_ori_inv_matrix[2, 0] * f[0, 0] + box_ori_inv_matrix[2, 1] * f[0, 1] + box_ori_inv_matrix[2, 2] * f[0, 2])
         Lfb = torch.tensor([Lfb1, Lfb2, Lfb3, Lfb4, Lfb5, Lfb6]).unsqueeze(1).to(self.device)
 
-        Lgb1 = g1
-        Lgb2 = g2
-        Lgb3 = g3
-        Lgb4 = -g1
-        Lgb5 = -g2
-        Lgb6 = -g3
+        Lgb1 = box_ori_inv_matrix[0, 0] * g1 + box_ori_inv_matrix[0, 1] * g2 + box_ori_inv_matrix[0, 2] * g3
+        Lgb2 = box_ori_inv_matrix[1, 0] * g1 + box_ori_inv_matrix[1, 1] * g2 + box_ori_inv_matrix[1, 2] * g3
+        Lgb3 = box_ori_inv_matrix[2, 0] * g1 + box_ori_inv_matrix[2, 1] * g2 + box_ori_inv_matrix[2, 2] * g3
+        Lgb4 = -(box_ori_inv_matrix[0, 0] * g1 + box_ori_inv_matrix[0, 1] * g2 + box_ori_inv_matrix[0, 2] * g3)
+        Lgb5 = -(box_ori_inv_matrix[1, 0] * g1 + box_ori_inv_matrix[1, 1] * g2 + box_ori_inv_matrix[1, 2] * g3)
+        Lgb6 = -(box_ori_inv_matrix[2, 0] * g1 + box_ori_inv_matrix[2, 1] * g2 + box_ori_inv_matrix[2, 2] * g3)
         Lgb = torch.cat((Lgb1, Lgb2, Lgb3, Lgb4, Lgb5, Lgb6)).to(self.device)
 
         gamma = 1
