@@ -21,6 +21,8 @@ hydra:
     dir: ./exp_local/${task}/${agent.name}/d${num_demo}/eval/s${seed}
 
 max_episode_steps: 100
+view_type: front
+render_three_views: False
 train: False
 
 use_dcbf: False
