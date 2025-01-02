@@ -33,7 +33,7 @@ class RLTrainer(BaseTrainer):
     def _setup_env(self):
         self.train_env = gym.make(self.cfg.task)
         self.train_env._max_episode_steps = self.cfg.max_episode_steps
-        self.eval_env = gym.make(self.cfg.task)
+        self.eval_env = gym.make(self.cfg.task, view_type=self.cfg.view_type)
         self.eval_env._max_episode_steps = self.cfg.max_episode_steps
         self.env_params = get_env_params(self.train_env, self.cfg)
 
