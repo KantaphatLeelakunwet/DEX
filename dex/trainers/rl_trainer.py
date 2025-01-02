@@ -33,7 +33,7 @@ class RLTrainer(BaseTrainer):
     def _setup_env(self):
         self.train_env = gym.make(self.cfg.task)
         self.train_env._max_episode_steps = self.cfg.max_episode_steps
-        self.eval_env = gym.make(self.cfg.task)
+        self.eval_env = gym.make(self.cfg.task, view_type=self.cfg.view_type)
         self.eval_env._max_episode_steps = self.cfg.max_episode_steps
         self.env_params = get_env_params(self.train_env, self.cfg)
 
@@ -193,7 +193,7 @@ class RLTrainer(BaseTrainer):
         violations = []
         for _ in range(self.cfg.n_eval_episodes):
             episode, _, env_steps, num_violations = self.eval_sampler.sample_episode(
-                is_train=False, render=True)
+                is_train=False, render=True, render_three_views=self.cfg.render_three_views)
             eval_rollout_storage.append(episode)
             violations.append(num_violations)
         rollout_status = eval_rollout_storage.rollout_stats()
