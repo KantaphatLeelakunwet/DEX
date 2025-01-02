@@ -22,6 +22,7 @@ hydra:
 
 max_episode_steps: 100
 view_type: front
+render_three_views: False
 train: False
 
 use_dcbf: False

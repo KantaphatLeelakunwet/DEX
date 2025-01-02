@@ -192,7 +192,7 @@ class RLTrainer(BaseTrainer):
         eval_rollout_storage = RolloutStorage()
         for _ in range(self.cfg.n_eval_episodes):
             episode, _, env_steps = self.eval_sampler.sample_episode(
-                is_train=False, render=True)
+                is_train=False, render=True, render_three_views=self.cfg.render_three_views)
             eval_rollout_storage.append(episode)
         rollout_status = eval_rollout_storage.rollout_stats()
         if self.use_multiple_workers:

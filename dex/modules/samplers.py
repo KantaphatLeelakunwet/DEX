@@ -62,7 +62,7 @@ class Sampler:
     def sample_action(self, obs, is_train):
         return self._agent.get_action(obs, noise=is_train)
 
-    def sample_episode(self, is_train, render=False, random_act=False):
+    def sample_episode(self, is_train, render=False, random_act=False, render_three_views=False):
         """Samples one episode from the environment."""
         self.init()
         episode, done = [], False
@@ -79,7 +79,12 @@ class Sampler:
             if action is None:
                 break
             if render:
-                render_obs = self._env.render('rgb_array')
+                if render_three_views:
+                    front_rgb_array, right_rgb_array, top_rgb_array = self._env.render_three_views('rgb_array')
+                    render_obs = np.concatenate([front_rgb_array, right_rgb_array, top_rgb_array], axis=1)
+                else:
+                    render_obs = self._env.render('rgb_array')
+
                 img = Image.fromarray(render_obs)
                 if not os.path.exists("saved_eval_pic"):
                     os.mkdir("saved_eval_pic")
