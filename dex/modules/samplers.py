@@ -155,6 +155,38 @@ class Sampler:
                     else:
                         violate_constraint = False
                 last_area = current_area
+            elif self.dcbf_constraint_type == 5:
+                # cylinder constraint
+                center, cylinder_ori = get_link_pose(self._env.obj_ids['obstacle'][0], -1)
+                cylinder_length = 0.35
+                radius = 0.06
+                rot_matrix = Rotation.from_quat(np.array(cylinder_ori)).as_matrix()
+                original_ori_vector = np.array([0, 0, 1]).reshape([3, 1])
+                current_ori_vector = (rot_matrix @ original_ori_vector).reshape(-1).tolist()
+                proj_vec = np.dot(current_ori_vector, np.array(self._obs['observation'][0:3])-np.array(center))
+                # for area 0, the agent can stay in area 0 or go to area 1 or area 2
+                # for area 1, the agent can only stay in area 1 or go to area 0
+                # for area 2, the agent can only stay in area 2 or go to area 0
+                if proj_vec**2 < (cylinder_length/2)**2:
+                    out = self.CBF.constraint_valid(constraint_type=self.dcbf_constraint_type,
+                                                        robot=self._obs['observation'][0:3],
+                                                        constraint_center=center, radius=radius,
+                                                        ori_vector=current_ori_vector)
+                    if out:
+                        current_area = 1
+                    else:
+                        current_area = 2
+                else:
+                    current_area = 0
+                if self._episode_step == 0:
+                    violate_constraint = False
+                else:
+                    if last_area + current_area == 3:
+                        # last and current areas are (1, 2) or (2, 1)
+                        violate_constraint = True
+                    else:
+                        violate_constraint = False
+                last_area = current_area
             else:
                 violate_constraint = False
                 
@@ -188,6 +220,12 @@ class Sampler:
                         if current_area > 0:
                             modified_action = self.CBF.dCBF_half_sphere(x0, u0, fx, g1, g2, g3,
                                                                         center, radius, current_area)
+                        else:
+                            modified_action = torch.tensor(action[0:3]).to(self.device)*0.05
+                    elif self.dcbf_constraint_type == 5:
+                        if current_area > 0:
+                            modified_action = self.CBF.dCBF_cylinder(x0, u0, fx, g1, g2, g3,
+                                                                     current_ori_vector, center, radius, current_area)
                         else:
                             modified_action = torch.tensor(action[0:3]).to(self.device)*0.05
                     # Remember to scale back the action before input into gym environment

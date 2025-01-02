@@ -110,7 +110,7 @@ class CBF(nn.Module):
     def constraint_valid(self, constraint_type, robot,
                          constraint_center=None,
                          point=None, normal_vector=None,
-                         box_min=None, box_max=None, radius=None):
+                         box_min=None, box_max=None, radius=None, ori_vector=None):
         # Assign robot state
         x, y, z = robot[0], robot[1], robot[2]
 
@@ -133,6 +133,10 @@ class CBF(nn.Module):
             x0, y0, z0 = constraint_center
             b = (x - x0) ** 2 + (y - y0) ** 2 + (z - z0) ** 2 - radius ** 2
             violate = (b > 0)
+        elif constraint_type == 5:
+            proj_vec = np.dot(np.array(ori_vector), np.array(robot)-np.array(constraint_center))*np.array(ori_vector)
+            norm_vec = np.array(robot)-(np.array(constraint_center)+proj_vec)
+            violate = (np.sum(norm_vec**2)-radius**2 > 0)
         return violate
 
     def dCBF_sphere(self, robot, u, f, g1, g2, g3, constraint_center):
@@ -343,6 +347,101 @@ class CBF(nn.Module):
         Lgb = 2 * (x - x0) * g1 \
             + 2 * (y - y0) * g2 \
             + 2 * (z - z0) * g3
+
+        gamma = 1
+        if current_area == 1:
+            b_safe = Lfb + gamma * b
+            A_safe = -Lgb
+        elif current_area == 2:
+            b_safe = -(Lfb + gamma * b)
+            A_safe = Lgb
+
+        dim = g1.shape[1]  # = 3
+        G = A_safe.to(self.device)
+        h = b_safe.unsqueeze(0).to(self.device)  # [1, 1]
+        P = torch.eye(dim).to(self.device)  # [3, 3]
+        q = -u.T  # [3, 1]
+
+        # NOTE: different x from above now
+        x = cvx_solver(P.double(), q.double(), G.double(), h.double())
+
+        out = []
+        for i in range(dim):
+            out.append(x[i])
+        out = np.array(out)
+        out = torch.tensor(out).float().to(self.device)
+        out = out.unsqueeze(0)
+        return out
+
+    def dCBF_cylinder(self, robot, u, f, g1, g2, g3, ori_vec, center, radius, current_area):
+        """Enforce CBF on action
+
+        Args:
+            robot  ([1, 3]): robot state
+            u  ([1, 3]): action
+            f  ([1, 3]): fx
+            g1 ([1, 3]): first row of gx
+            g2 ([1, 3]): second row of gx
+            g3 ([1, 3]): third row of gx
+        """
+        # Assign robot state
+        x, y, z = robot[0, 0], robot[0, 1], robot[0, 2]
+
+        # Obstacle point position
+        x0, y0, z0 = center
+        #  cylinder orientation vector
+        orix, oriy, oriz = ori_vec
+
+        r = radius
+
+        # proj_factor = orix * (x - x0) + oriy * (y - y0) + oriz * (z - z0)
+        # norm_vec_x = x - x0 - (orix * (x - x0) + oriy * (y - y0) + oriz * (z - z0)) * orix
+        # norm_vec_y = y - y0 - (orix * (x - x0) + oriy * (y - y0) + oriz * (z - z0)) * oriy
+        # norm_vec_z = z - z0 - (orix * (x - x0) + oriy * (y - y0) + oriz * (z - z0)) * oriz
+
+        # Compute barrier function
+        # derivation
+        # b = (x - x0 - (orix * (x - x0) + oriy * (y - y0) + oriz * (z - z0)) * orix) ** 2 +\
+        #     (y - y0 - (orix * (x - x0) + oriy * (y - y0) + oriz * (z - z0)) * oriy) ** 2 +\
+        #     (z - z0 - (orix * (x - x0) + oriy * (y - y0) + oriz * (z - z0)) * oriz) ** 2 - r ** 2
+        # b = ((1 - orix ** 2)(x - x0) - orix * (oriy * (y - y0) + oriz * (z - z0))) ** 2 +\
+        #     ((1 - oriy ** 2)(y - y0) - oriy * (orix * (x - x0) + oriz * (z - z0))) ** 2 +\
+        #     ((1 - oriz ** 2)(z - z0) - oriz * (orix * (x - x0) + oriy * (y - y0))) ** 2 - r ** 2
+        # b = ((1 - orix ** 2)(x - x0) - orix * oriy * (y - y0) - orix * oriz * (z - z0)) ** 2 +\
+        #     (- oriy * orix * (x - x0) + (1 - oriy ** 2)(y - y0) - oriy * oriz * (z - z0)) ** 2 +\
+        #     (- oriz * orix * (x - x0) - oriz * oriy * (y - y0) + (1 - oriz ** 2)(z - z0)) ** 2 - r ** 2
+        c1x = (1 - orix ** 2)
+        c1y = - orix * oriy
+        c1z = - orix * oriz
+        c2x = - oriy * orix
+        c2y = (1 - oriy ** 2)
+        c2z = - oriy * oriz
+        c3x = - oriz * orix
+        c3y = - oriz * oriy
+        c3z = (1 - oriz ** 2)
+        b = (c1x * (x - x0) + c1y * (y - y0) + c1z * (z - z0)) ** 2 +\
+            (c2x * (x - x0) + c2y * (y - y0) + c2z * (z - z0)) ** 2 +\
+            (c3x * (x - x0) + c3y * (y - y0) + c3z * (z - z0)) ** 2 - r ** 2
+
+        Lfb = (2 * c1x * (c1x * (x - x0) + c1y * (y - y0) + c1z * (z - z0)) +
+               2 * c2x * (c2x * (x - x0) + c2y * (y - y0) + c2z * (z - z0)) +
+               2 * c3x * (c3x * (x - x0) + c3y * (y - y0) + c3z * (z - z0))) * f[0, 0] \
+            + (2 * c1y * (c1x * (x - x0) + c1y * (y - y0) + c1z * (z - z0)) +
+               2 * c2y * (c2x * (x - x0) + c2y * (y - y0) + c2z * (z - z0)) +
+               2 * c3y * (c3x * (x - x0) + c3y * (y - y0) + c3z * (z - z0))) * f[0, 1] \
+            + (2 * c1z * (c1x * (x - x0) + c1y * (y - y0) + c1z * (z - z0)) +
+               2 * c2z * (c2x * (x - x0) + c2y * (y - y0) + c2z * (z - z0)) +
+               2 * c3z * (c3x * (x - x0) + c3y * (y - y0) + c3z * (z - z0))) * f[0, 2]
+
+        Lgb = (2 * c1x * (c1x * (x - x0) + c1y * (y - y0) + c1z * (z - z0)) +
+               2 * c2x * (c2x * (x - x0) + c2y * (y - y0) + c2z * (z - z0)) +
+               2 * c3x * (c3x * (x - x0) + c3y * (y - y0) + c3z * (z - z0))) * g1 \
+            + (2 * c1y * (c1x * (x - x0) + c1y * (y - y0) + c1z * (z - z0)) +
+               2 * c2y * (c2x * (x - x0) + c2y * (y - y0) + c2z * (z - z0)) +
+               2 * c3y * (c3x * (x - x0) + c3y * (y - y0) + c3z * (z - z0))) * g2 \
+            + (2 * c1z * (c1x * (x - x0) + c1y * (y - y0) + c1z * (z - z0)) +
+               2 * c2z * (c2x * (x - x0) + c2y * (y - y0) + c2z * (z - z0)) +
+               2 * c3z * (c3x * (x - x0) + c3y * (y - y0) + c3z * (z - z0))) * g3
 
         gamma = 1
         if current_area == 1:
