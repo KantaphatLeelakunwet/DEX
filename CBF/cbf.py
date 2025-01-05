@@ -4,7 +4,8 @@ import torch
 import torch.nn as nn
 
 from cvxopt import solvers, matrix
-import math
+from math import sqrt, cos, sin, acos
+from scipy.spatial.transform import Rotation
 
 # # Load dataset
 # obs = np.load('./data/obs3.npy')  # [100, 51, 19]
@@ -107,6 +108,29 @@ class CBF(nn.Module):
 
         return out
 
+    def build_discretized_center_line(self, cylinder_length, radius, center, cylinder_ori):
+        rot_matrix = Rotation.from_quat(np.array(cylinder_ori)).as_matrix()
+
+        # discretize the center line
+        all_point = []
+        num = 100
+        for i in range(num):
+            ori_xyz = np.array([0, -radius, radius + i / num * cylinder_length]).reshape(3, 1)
+            all_point.append((rot_matrix@ori_xyz).reshape(-1)+np.array(center))
+        for i in range(num):
+            theta = i / num * (np.pi/2)
+            ori_xyz = np.array([0, -radius*sin(theta), radius*(1-cos(theta))]).reshape(3, 1)
+            all_point.append((rot_matrix @ ori_xyz).reshape(-1)+np.array(center))
+        for i in range(num):
+            theta = i / num * (np.pi/2)
+            ori_xyz = np.array([0, radius*sin(theta), radius*(cos(theta)-1)]).reshape(3, 1)
+            all_point.append((rot_matrix @ ori_xyz).reshape(-1)+np.array(center))
+        for i in range(num):
+            ori_xyz = np.array([0, radius, -radius - i / num * cylinder_length]).reshape(3, 1)
+            all_point.append((rot_matrix @ ori_xyz).reshape(-1)+np.array(center))
+        # 400, 3
+        self.all_point = np.stack(all_point, axis=0)
+
     def constraint_valid(self, constraint_type, robot,
                          constraint_center=None,
                          point=None, normal_vector=None,
@@ -121,7 +145,7 @@ class CBF(nn.Module):
         elif constraint_type == 2:
             x0, y0, z0 = point
             a0, b0, c0 = normal_vector
-            norm_score = math.sqrt(a0 ** 2 + b0 ** 2 + c0 ** 2)
+            norm_score = sqrt(a0 ** 2 + b0 ** 2 + c0 ** 2)
             a0, b0, c0 = a0 / norm_score, b0 / norm_score, c0 / norm_score
             b = (a0 * (x - x0) + b0 * (y - y0) + c0 * (z - z0)) ** 2 - self.d ** 2
             violate = (b <= 0)
@@ -136,6 +160,11 @@ class CBF(nn.Module):
         elif constraint_type == 5:
             proj_vec = np.dot(np.array(ori_vector), np.array(robot)-np.array(constraint_center))*np.array(ori_vector)
             norm_vec = np.array(robot)-(np.array(constraint_center)+proj_vec)
+            violate = (np.sum(norm_vec**2)-radius**2 > 0)
+        elif constraint_type == 6:
+            dis = np.sum((self.all_point-np.array(robot))**2, axis=-1)
+            min_dis_ind = np.argmin(dis)
+            norm_vec = np.array(robot)-self.all_point[min_dis_ind]
             violate = (np.sum(norm_vec**2)-radius**2 > 0)
         return violate
 
@@ -208,7 +237,7 @@ class CBF(nn.Module):
         # Obstacle is a surface defined by a point on the surface and the normal vector
         x0, y0, z0 = point
         a0, b0, c0 = normal_vector
-        norm_score = math.sqrt(a0**2+b0**2+c0**2)
+        norm_score = sqrt(a0**2+b0**2+c0**2)
         a0, b0, c0 = a0/norm_score, b0/norm_score, c0/norm_score
 
         d = self.d
@@ -442,6 +471,63 @@ class CBF(nn.Module):
             + (2 * c1z * (c1x * (x - x0) + c1y * (y - y0) + c1z * (z - z0)) +
                2 * c2z * (c2x * (x - x0) + c2y * (y - y0) + c2z * (z - z0)) +
                2 * c3z * (c3x * (x - x0) + c3y * (y - y0) + c3z * (z - z0))) * g3
+
+        gamma = 1
+        if current_area == 1:
+            b_safe = Lfb + gamma * b
+            A_safe = -Lgb
+        elif current_area == 2:
+            b_safe = -(Lfb + gamma * b)
+            A_safe = Lgb
+
+        dim = g1.shape[1]  # = 3
+        G = A_safe.to(self.device)
+        h = b_safe.unsqueeze(0).to(self.device)  # [1, 1]
+        P = torch.eye(dim).to(self.device)  # [3, 3]
+        q = -u.T  # [3, 1]
+
+        # NOTE: different x from above now
+        x = cvx_solver(P.double(), q.double(), G.double(), h.double())
+
+        out = []
+        for i in range(dim):
+            out.append(x[i])
+        out = np.array(out)
+        out = torch.tensor(out).float().to(self.device)
+        out = out.unsqueeze(0)
+        return out
+
+    def dCBF_complex_cylinder(self, robot, u, f, g1, g2, g3, radius, current_area):
+        """Enforce CBF on action
+
+        Args:
+            robot  ([1, 3]): robot state
+            u  ([1, 3]): action
+            f  ([1, 3]): fx
+            g1 ([1, 3]): first row of gx
+            g2 ([1, 3]): second row of gx
+            g3 ([1, 3]): third row of gx
+        """
+        # Assign robot state
+        x, y, z = robot[0, 0], robot[0, 1], robot[0, 2]
+
+        # Find the center line point
+        dis = np.sum((self.all_point - np.array([x.item(), y.item(), z.item()])) ** 2, axis=-1)
+        min_dis_ind = np.argmin(dis)
+        x0, y0, z0 = self.all_point[min_dis_ind].tolist()
+
+        r = radius
+
+        # Compute barrier function
+        b = (x - x0) ** 2 + (y - y0) ** 2 + (z - z0) ** 2 - r ** 2
+
+        Lfb = 2 * (x - x0) * f[0, 0] \
+            + 2 * (y - y0) * f[0, 1] \
+            + 2 * (z - z0) * f[0, 2]
+
+        Lgb = 2 * (x - x0) * g1 \
+            + 2 * (y - y0) * g2 \
+            + 2 * (z - z0) * g3
 
         gamma = 1
         if current_area == 1:
