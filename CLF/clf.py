@@ -25,6 +25,8 @@ class CLF(nn.Module):
         super(CLF, self).__init__()
 
         self.net = self.build_mlp(fc_param)
+        self.x_dim = fc_param[0]
+        self.u_dim = (fc_param[-1] - fc_param[0]) // fc_param[0]
 
         # Initializing weights
         for m in self.net.modules():
@@ -39,31 +41,35 @@ class CLF(nn.Module):
         )
 
     def forward(self, t, x):
-        # x.shape = [20, 1, 3]
         if self.training:
-
-            net_out = self.net(x)  # [20, 1, 6]
+            # x.shape = [20, 1, 3], [20, 1, 6]
+            net_out = self.net(x)  # [20, 1, 6], [20, 1, 18]
 
             # \dot{x} = f(x) + g(x) * u
-            fx = net_out[:, :, :3]  # [20, 1, 3]
-            gx = net_out[:, :, 3:]  # [20, 1, 3]
-
-            u = self.u  # [20, 1, 1]
-
-            out = fx + gx * u  # [20, 1, 3]
+            fx = net_out[:, :, :self.x_dim]  # [20, 1, 3], [20, 1, 6]
+            gx = net_out[:, :, self.x_dim:]  # [20, 1, 3], [20, 1, 12]
+            
+            Gx = torch.reshape(gx, (x.shape[0], self.u_dim, self.x_dim)) # [20, 1, 3], [20, 2, 6]
+            # print(Gx.mT.shape)    [20, 6, 2]
+            
+            out = fx + self.u @ Gx
+            # out = fx + gx * self.u  # [20, 1, 3]
 
         else:
             # For test and evaluation
-
-            net_out = self.net(x)  # [1, 6]
+            # x.shape = [1, 3]
+            net_out = self.net(x)  # [1, 6], [1, 18]
 
             # \dot{x} = f(x) + g(x) * u
-            fx = net_out[:, :3]  # [1, 3]
-            gx = net_out[:, 3:]  # [1, 3]
+            fx = net_out[:, :self.x_dim]  # [1, 3], [1, 6]
+            gx = net_out[:, self.x_dim:]  # [1, 3], [1, 12]
 
-            u = self.u  # [1, 1]
-
-            out = fx + gx * u  # [1, 3]
+            Gx = torch.reshape(gx, (self.u_dim, self.x_dim))
+            
+            # u: [1, 1], [1, 2]
+            # out = fx + gx * self.u  # [1, 3]
+            
+            out = fx + self.u @ Gx
 
         return out
 

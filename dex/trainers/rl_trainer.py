@@ -191,11 +191,14 @@ class RLTrainer(BaseTrainer):
         '''Eval agent.'''
         eval_rollout_storage = RolloutStorage()
         violations = []
-        for _ in range(self.cfg.n_eval_episodes):
+        for ep in range(self.cfg.n_eval_episodes):
             episode, _, env_steps, num_violations = self.eval_sampler.sample_episode(
-                is_train=False, render=True, render_three_views=self.cfg.render_three_views)
+                is_train=False, ep=ep, render=True, render_three_views=self.cfg.render_three_views)
             eval_rollout_storage.append(episode)
-            violations.append(num_violations)
+            if num_violations > 0:
+                violations.append(1)
+            else:
+                violations.append(0)
         rollout_status = eval_rollout_storage.rollout_stats()
 
         # Display average number of violations per episode

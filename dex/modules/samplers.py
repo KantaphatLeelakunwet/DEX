@@ -62,7 +62,7 @@ class Sampler:
     def sample_action(self, obs, is_train):
         return self._agent.get_action(obs, noise=is_train)
 
-    def sample_episode(self, is_train, render=False, random_act=False, render_three_views=False):
+    def sample_episode(self, is_train, ep, render=False, random_act=False, render_three_views=False):
         """Samples one episode from the environment."""
         self.init()
         episode, done = [], False
@@ -89,9 +89,21 @@ class Sampler:
                     render_obs = self._env.render('rgb_array')
 
                 img = Image.fromarray(render_obs)
-                if not os.path.exists("saved_eval_pic"):
-                    os.mkdir("saved_eval_pic")
-                img.save(f'saved_eval_pic/image_{self._episode_step}.png')
+                if self.cfg.use_dclf:
+                    if not os.path.exists(f"saved_eval_pic/CLF/{self.cfg.task}/{ep:02}"):
+                        os.mkdir(f"saved_eval_pic/CLF/{self.cfg.task}/{ep:02}")
+                    img.save(f'saved_eval_pic/CLF/{self.cfg.task}/{ep:02}/image_{self._episode_step}.png')
+                elif self.cfg.use_dcbf:
+                    if not os.path.exists(f"saved_eval_pic/CBF/{self.cfg.task}/{ep:02}"):
+                        os.mkdir(f"saved_eval_pic/CBF/{self.cfg.task}/{ep:02}")
+                    img.save(f'saved_eval_pic/CBF/{self.cfg.task}/{ep:02}/image_{self._episode_step}.png')
+                else:
+                    if not os.path.exists(f"saved_eval_pic/NONE/{self.cfg.task}/{ep:02}"):
+                        os.mkdir(f"saved_eval_pic/NONE/{self.cfg.task}/{ep:02}")
+                    img.save(f'saved_eval_pic/NONE/{self.cfg.task}/{ep:02}/image_{self._episode_step}.png')
+                # if not os.path.exists("saved_eval_pic"):
+                #     os.mkdir("saved_eval_pic")
+                # img.save(f'saved_eval_pic/image_{self._episode_step}.png')
 
             # ===================== constraint test =====================
             # Display whether the tip of the psm has touch the obstacle or not
@@ -136,7 +148,7 @@ class Sampler:
             elif self.dcbf_constraint_type == 4:
                 # half-sphere constraint
                 center, sphere_ori = get_link_pose(self._env.obj_ids['obstacle'][0], -1)
-                radius = 0.2
+                radius = 0.1
                 rot_matrix = Rotation.from_quat(np.array(sphere_ori)).as_matrix()
                 original_normal_vector = np.array([0, 1, 0]).reshape([3, 1])
                 normal_vector = (rot_matrix @ original_normal_vector).reshape(-1).tolist()
@@ -154,6 +166,9 @@ class Sampler:
                         current_area = 2
                 else:
                     current_area = 0
+                
+                print(current_area)
+                
                 if self._episode_step == 0:
                     violate_constraint = False
                 else:
@@ -200,9 +215,10 @@ class Sampler:
                 
             if violate_constraint:
                 num_violations += 1
-                print(f'warning: violate the constraint at episode step {self._episode_step}')
+                print(f'Episode {ep:02}: warning: violate the constraint at episode step {self._episode_step}')
 
             # ===================== CBF =====================
+            isModified = False
             if self.cfg.use_dcbf and self.dcbf_constraint_type != 0:
                 with torch.no_grad():
                     x0 = torch.tensor(
@@ -237,11 +253,17 @@ class Sampler:
                                                                      current_ori_vector, center, radius, current_area)
                         else:
                             modified_action = torch.tensor(action[0:3]).to(self.device)*0.05
+                    
+                    isModified = True
+                    # Check if action is modified by CBF
+                    if (modified_action.cpu().numpy() == 0.05 * action[0:3]).all():
+                        print("ACTION IS NOT MODIFIED!!!")
+                        isModified = False
                     # Remember to scale back the action before input into gym environment
                     action[0:3] = modified_action.cpu().numpy() / 0.05
 
             # ===================== CLF =====================
-            if self.cfg.use_dclf and self.dcbf_constraint_type != 0:
+            if isModified and self.cfg.use_dclf and self.dcbf_constraint_type != 0:
                 assert self.cfg.use_dcbf
                 with torch.no_grad():
                     # predicted next position given the modified action
@@ -346,6 +368,16 @@ class Sampler:
             self._obs = obs
             self._episode_step += 1
 
+        if episode[-1]['success'] == 1.0:
+            if self.cfg.use_dclf:
+                success_filename = f"saved_eval_pic/CLF/{self.cfg.task}/{ep:02}/success.txt"
+            elif self.cfg.use_dcbf:
+                success_filename = f"saved_eval_pic/CBF/{self.cfg.task}/{ep:02}/success.txt"
+            else:
+                success_filename = f"saved_eval_pic/NONE/{self.cfg.task}/{ep:02}/success.txt"
+            with open(success_filename, 'w') as file:
+                file.write("Hello, World!\n")
+            file.close()
         # make sure episode is marked as done at final time step
         episode[-1].done = True
         rollouts = self._episode_cache.pop()

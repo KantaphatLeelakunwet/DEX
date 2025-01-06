@@ -6,7 +6,7 @@ from torchdiffeq import odeint
 from cbf import CBF
 
 tasks = ['NeedlePick-v0', 'GauzeRetrieve-v0',
-         'NeedleReach-v0', 'PegTransfer-v0']
+         'NeedleReach-v0', 'PegTransfer-v0', 'NeedleRegrasp-v0',]
 
 parser = argparse.ArgumentParser('ODE demo')
 parser.add_argument('--method', type=str,
@@ -86,10 +86,10 @@ with torch.no_grad():
             net_out = func.net(x0)  # [1, 12]
 
             # \dot{x} = f(x) + g(x) * u
-            fx = net_out[:, :3]  # [1, 3]
-            gx = net_out[:, 3:]  # [1, 9]
+            fx = net_out[:, :x_dim]  # [1, 3]
+            gx = net_out[:, x_dim:]  # [1, 9]
 
-            g1, g2, g3 = torch.chunk(gx, 3, dim=-1)  # [1, 3]
+            g1, g2, g3 = torch.chunk(gx, u_dim, dim=-1)  # [1, 3]
 
             func.u = func.dCBF(x0, u_test_i, fx, g1, g2, g3)
         else:
@@ -104,6 +104,8 @@ with torch.no_grad():
                 [x0[0, 0].cpu().item(), x0[0, 1].cpu().item(), x0[0, 2].cpu().item()]
             )
         )
+        
+        print(f"timestep{i:02d}, loss: {torch.sum((x0 - x_test[i + 1]) ** 2).item()}")
 
         # Compute the distance between robot and obstacle point
         barrier = (x0[0, 0] - 2.67054296) ** 2 \
