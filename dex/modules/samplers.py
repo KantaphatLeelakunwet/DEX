@@ -91,15 +91,15 @@ class Sampler:
                 img = Image.fromarray(render_obs)
                 if self.cfg.use_dclf:
                     if not os.path.exists(f"saved_eval_pic/CLF/{self.cfg.task}/{ep:02}"):
-                        os.mkdir(f"saved_eval_pic/CLF/{self.cfg.task}/{ep:02}")
+                        os.makedirs(f"saved_eval_pic/CLF/{self.cfg.task}/{ep:02}")
                     img.save(f'saved_eval_pic/CLF/{self.cfg.task}/{ep:02}/image_{self._episode_step}.png')
                 elif self.cfg.use_dcbf:
                     if not os.path.exists(f"saved_eval_pic/CBF/{self.cfg.task}/{ep:02}"):
-                        os.mkdir(f"saved_eval_pic/CBF/{self.cfg.task}/{ep:02}")
+                        os.makedirs(f"saved_eval_pic/CBF/{self.cfg.task}/{ep:02}")
                     img.save(f'saved_eval_pic/CBF/{self.cfg.task}/{ep:02}/image_{self._episode_step}.png')
                 else:
                     if not os.path.exists(f"saved_eval_pic/NONE/{self.cfg.task}/{ep:02}"):
-                        os.mkdir(f"saved_eval_pic/NONE/{self.cfg.task}/{ep:02}")
+                        os.makedirs(f"saved_eval_pic/NONE/{self.cfg.task}/{ep:02}")
                     img.save(f'saved_eval_pic/NONE/{self.cfg.task}/{ep:02}/image_{self._episode_step}.png')
                 # if not os.path.exists("saved_eval_pic"):
                 #     os.mkdir("saved_eval_pic")
@@ -133,11 +133,10 @@ class Sampler:
             elif self.dcbf_constraint_type == 3:
                 # plate constraint
                 center, _ = get_link_pose(self._env.obj_ids['obstacle'][0], -1)
-                plate_length = 0.025
-                radius = 0.05
+                plate_length = 0.02
+                radius = 0.075
                 z_diff = self._obs['observation'][2]-center[2]
-                # area 0: no need for adding constraint
-                # area 1 or 2: add cbf constraint
+                # area 1 or 2 or 3: add cbf constraint
                 if z_diff**2 < (plate_length/2)**2:
                     violate_constraint = self.CBF.constraint_valid(constraint_type=self.dcbf_constraint_type,
                                                         robot=self._obs['observation'][0:3],
@@ -150,7 +149,7 @@ class Sampler:
                     if b <= 0:
                         current_area = 2
                     else:
-                        current_area = 0
+                        current_area = 3
             elif self.dcbf_constraint_type == 4:
                 # half-sphere constraint
                 center, sphere_ori = get_link_pose(self._env.obj_ids['obstacle'][0], -1)
@@ -279,11 +278,8 @@ class Sampler:
                     elif self.dcbf_constraint_type == 2:
                         modified_action = self.CBF.dCBF_surface(x0, u0, fx, g1, g2, g3, point, normal_vector, length)
                     elif self.dcbf_constraint_type == 3:
-                        if current_area > 0:
-                            modified_action = self.CBF.dCBF_plate(x0, u0, fx, g1, g2, g3,
-                                                                  center, radius, plate_length, current_area)
-                        else:
-                            modified_action = torch.tensor(action[0:3]).to(self.device) * 0.05
+                        modified_action = self.CBF.dCBF_plate(x0, u0, fx, g1, g2, g3,
+                                                              center, radius, plate_length, current_area)
                     elif self.dcbf_constraint_type == 4:
                         if current_area > 0:
                             modified_action = self.CBF.dCBF_half_sphere(x0, u0, fx, g1, g2, g3,

@@ -304,6 +304,17 @@ class CBF(nn.Module):
             Lfb = 2 * (z - z0) * f[0, 2]
             Lgb = 2 * (z - z0) * g3
 
+        elif current_area == 3:
+            b = (x - x0) ** 2 + (y - y0) ** 2 + (z - z0) ** 2 - (r ** 2 + (d / 2) ** 2)
+
+            Lfb = 2 * (x - x0) * f[0, 0] \
+                  + 2 * (y - y0) * f[0, 1] \
+                  + 2 * (z - z0) * f[0, 2]
+
+            Lgb = 2 * (x - x0) * g1 \
+                  + 2 * (y - y0) * g2 \
+                  + 2 * (z - z0) * g3
+
         gamma = 1
         b_safe = Lfb + gamma * b
         A_safe = -Lgb
