@@ -80,3 +80,5 @@ saved_eval_pic/
 ## Datasets
 Data/
 !Data/data_processing.py
+
+log/

@@ -11,7 +11,7 @@ from cbf import CBF
 torch.autograd.set_detect_anomaly(True)
 
 tasks = ['NeedlePick-v0', 'GauzeRetrieve-v0',
-         'NeedleReach-v0', 'PegTransfer-v0']
+         'NeedleReach-v0', 'PegTransfer-v0', 'NeedleRegrasp-v0',]
 
 parser = argparse.ArgumentParser('ODE demo')
 parser.add_argument('--method', type=str,
@@ -141,6 +141,7 @@ def makedirs(dirname):
         os.makedirs(dirname)
     else:
         print("Directory existed! Please recheck!")
+        print("If you want to retrain, please increment exp_id variable")
         exit(0)
 
 
