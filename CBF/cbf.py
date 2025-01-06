@@ -47,6 +47,8 @@ class CBF(nn.Module):
         super(CBF, self).__init__()
 
         self.net = self.build_mlp(fc_param)
+        self.x_dim = fc_param[0]
+        self.u_dim = (fc_param[-1] - fc_param[0]) // fc_param[0]
 
         # Initializing weights
         for m in self.net.modules():
@@ -70,17 +72,15 @@ class CBF(nn.Module):
             net_out = self.net(x)  # [20, 1, 12]
 
             # \dot{x} = f(x) + g(x) * u
-            fx = net_out[:, :, :3]
-            gx = net_out[:, :, 3:]
+            fx = net_out[:, :, :self.x_dim]
+            gx = net_out[:, :, self.x_dim:]
 
-            g1, g2, g3 = torch.chunk(gx, 3, dim=-1)  # [20, 1, 3]
+            g_chunks = torch.chunk(gx, self.u_dim, dim=-1)
 
             u = self.u  # [20, 1, 3]
-
+            
             out = torch.cat([
-                (g1 * u).sum(axis=2).unsqueeze(2),
-                (g2 * u).sum(axis=2).unsqueeze(2),
-                (g3 * u).sum(axis=2).unsqueeze(2)
+                (g * u).sum(axis=2).unsqueeze(2) for g in g_chunks
             ], dim=2) + fx  # [20, 1, 3]
 
         else:
@@ -89,18 +89,17 @@ class CBF(nn.Module):
             net_out = self.net(x)  # [1, 12]
 
             # \dot{x} = f(x) + g(x) * u
-            fx = net_out[:, :3]  # [1, 3]
-            gx = net_out[:, 3:]  # [1, 9]
+            fx = net_out[:, :self.x_dim]  # [1, 3]
+            gx = net_out[:, self.x_dim:]  # [1, 9]
 
-            g1, g2, g3 = torch.chunk(gx, 3, dim=-1)  # [1, 3]
+            Gx = torch.reshape(gx, (self.u_dim, self.x_dim))
 
-            u = self.u  # [1, 3]
-
-            out = torch.cat([
-                (g1 * u).sum(axis=1).unsqueeze(1),
-                (g2 * u).sum(axis=1).unsqueeze(1),
-                (g3 * u).sum(axis=1).unsqueeze(1)
-            ], dim=1) + fx  # [1, 3]
+            # g_chunks = torch.chunk(gx, self.u_dim, dim=-1)
+            # out = torch.cat([
+            #     (g * self.u).sum(axis=1).unsqueeze(1) for g in g_chunks
+            # ], dim=1) + fx  # [1, 3]
+            
+            out = fx + self.u @ Gx.T
 
         return out
 

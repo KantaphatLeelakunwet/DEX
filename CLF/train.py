@@ -11,14 +11,14 @@ from clf import CLF
 torch.autograd.set_detect_anomaly(True)
 
 tasks = ['NeedlePick-v0', 'GauzeRetrieve-v0',
-         'NeedleReach-v0', 'PegTransfer-v0']
+         'NeedleReach-v0', 'PegTransfer-v0', 'NeedleRegrasp-v0',]
 
 parser = argparse.ArgumentParser('ODE demo')
 parser.add_argument('--method', type=str,
                     choices=['dopri8', 'adams'], default='dopri8')  # dopri5
 parser.add_argument('--activation', type=str,
                     choices=['gelu', 'silu', 'tanh'], default='gelu')
-parser.add_argument('--task', type=str, choices=tasks, default='NeedlePick-v0')
+parser.add_argument('--task', type=str, choices=tasks, default='NeedleRegrasp-v0')
 # length of each trajectory
 parser.add_argument('--data_size', type=int, default=50)
 parser.add_argument('--batch_time', type=int, default=10)
@@ -45,7 +45,8 @@ t = torch.linspace(0., 4.9, args.data_size).to(device)
 
 # Load dataset
 obs = np.load(f'../Data/{args.task}/obs_orn.npy')  # [100, 51, 4]
-obs = obs[:, :, 0:3]  # Ignore jaw angle
+if args.task != 'NeedleRegrasp-v0':
+    obs = obs[:, :, 0:3]  # Ignore jaw angle
 obs = torch.tensor(obs).float()  # [100, 51, 3]
 # obs[3:6] = orientation in Euler
 # obs[6] = jaw angle
@@ -59,8 +60,12 @@ acs = np.load(f'../Data/{args.task}/acs_orn.npy')  # [100, 50 ,2]
 #       acs[3] *= np.deg2rad(30) # yaw, limit maximum change in rotation
 #       Ignoring acs[4] for now
 #       https://github.com/med-air/SurRoL/blob/main/surrol/tasks/psm_env.py#L196
-acs = acs[:, :, 0] * np.deg2rad(30)  # [100, 50, 1]
-acs = acs.reshape((100, 50, 1))
+if args.task == 'NeedleRegrasp-v0':
+    acs *= np.deg2rad(15)
+    assert acs.shape == (100, 50, 2)
+else:
+    acs = acs[:, :, 0] * np.deg2rad(30)  # [100, 50, 1]
+    acs = acs.reshape((100, 50, 1))
 acs = torch.tensor(acs).float()
 
 # \dot{x} = f(x) + u * g(x)
@@ -130,6 +135,7 @@ def makedirs(dirname):
         os.makedirs(dirname)
     else:
         print("Directory existed! Please recheck!")
+        print("If you want to retrain, please increment exp_id variable")
         exit(0)
 
 

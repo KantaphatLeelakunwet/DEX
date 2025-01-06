@@ -190,11 +190,21 @@ class RLTrainer(BaseTrainer):
     def eval(self):
         '''Eval agent.'''
         eval_rollout_storage = RolloutStorage()
-        for _ in range(self.cfg.n_eval_episodes):
-            episode, _, env_steps = self.eval_sampler.sample_episode(
-                is_train=False, render=True, render_three_views=self.cfg.render_three_views)
+        violations = []
+        for ep in range(self.cfg.n_eval_episodes):
+            episode, _, env_steps, num_violations = self.eval_sampler.sample_episode(
+                is_train=False, ep=ep, render=True, render_three_views=self.cfg.render_three_views)
             eval_rollout_storage.append(episode)
+            if num_violations > 0:
+                violations.append(1)
+            else:
+                violations.append(0)
         rollout_status = eval_rollout_storage.rollout_stats()
+
+        # Display average number of violations per episode
+        print(
+            f"Average number of violations per episode: {sum(violations) / len(violations)}")
+
         if self.use_multiple_workers:
             rollout_status = mpi_gather_experience_rollots(rollout_status)
             for key, value in rollout_status.items():
