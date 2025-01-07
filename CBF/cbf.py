@@ -64,10 +64,6 @@ class CBF(nn.Module):
 
         # constraint
         # val = 5 * URDF's val
-        # Radius of the sphere
-        # Distance to the surface
-        self.r = 0.05
-        self.d = 0.01
 
     def forward(self, t, x):
         # x.shape = [20, 1, 3]
@@ -131,27 +127,26 @@ class CBF(nn.Module):
         self.all_point = np.stack(all_point, axis=0)
 
     def constraint_valid(self, constraint_type, robot,
-                         constraint_center=None,
-                         point=None, normal_vector=None,
-                         box_min=None, box_max=None, radius=None, ori_vector=None):
+                         constraint_center=None, length=None,
+                         point=None, normal_vector=None, radius=None, ori_vector=None):
         # Assign robot state
         x, y, z = robot[0], robot[1], robot[2]
 
         if constraint_type == 1:
             x0, y0, z0 = constraint_center
-            b = (x - x0) ** 2 + (y - y0) ** 2 + (z - z0) ** 2 - self.r ** 2
+            b = (x - x0) ** 2 + (y - y0) ** 2 + (z - z0) ** 2 - radius ** 2
             violate = (b <= 0)
         elif constraint_type == 2:
             x0, y0, z0 = point
             a0, b0, c0 = normal_vector
             norm_score = sqrt(a0 ** 2 + b0 ** 2 + c0 ** 2)
             a0, b0, c0 = a0 / norm_score, b0 / norm_score, c0 / norm_score
-            b = (a0 * (x - x0) + b0 * (y - y0) + c0 * (z - z0)) ** 2 - self.d ** 2
+            b = (a0 * (x - x0) + b0 * (y - y0) + c0 * (z - z0)) ** 2 - length ** 2
             violate = (b <= 0)
         elif constraint_type == 3:
-            xmin, ymin, zmin = box_min
-            xmax, ymax, zmax = box_max
-            violate = (x < xmin) or (x > xmax) or (y < ymin) or (y > ymax) or (z < zmin) or (z > zmax)
+            x0, y0, z0 = constraint_center
+            b = (x - x0) ** 2 + (y - y0) ** 2 - radius ** 2
+            violate = (b <= 0)
         elif constraint_type == 4:
             x0, y0, z0 = constraint_center
             b = (x - x0) ** 2 + (y - y0) ** 2 + (z - z0) ** 2 - radius ** 2
@@ -167,7 +162,7 @@ class CBF(nn.Module):
             violate = (np.sum(norm_vec**2)-radius**2 > 0)
         return violate
 
-    def dCBF_sphere(self, robot, u, f, g1, g2, g3, constraint_center):
+    def dCBF_sphere(self, robot, u, f, g1, g2, g3, constraint_center, radius):
         """Enforce CBF on action
 
         Args:
@@ -185,7 +180,7 @@ class CBF(nn.Module):
         # x0, y0, z0 = 2.66255212, -0.00543937, 3.49126458
         x0, y0, z0 = constraint_center
 
-        r = self.r
+        r = radius
 
         # Compute barrier function
         b = (x - x0) ** 2 + (y - y0) ** 2 + (z - z0) ** 2 - r ** 2
@@ -219,7 +214,7 @@ class CBF(nn.Module):
         out = out.unsqueeze(0)
         return out
 
-    def dCBF_surface(self, robot, u, f, g1, g2, g3, point, normal_vector):
+    def dCBF_surface(self, robot, u, f, g1, g2, g3, point, normal_vector, length):
         """Enforce CBF on action
 
         Args:
@@ -239,7 +234,7 @@ class CBF(nn.Module):
         norm_score = sqrt(a0**2+b0**2+c0**2)
         a0, b0, c0 = a0/norm_score, b0/norm_score, c0/norm_score
 
-        d = self.d
+        d = length
 
         # Compute barrier function
         b = (a0 * (x - x0) + b0 * (y - y0) + c0 * (z - z0)) ** 2 - d ** 2
@@ -273,7 +268,7 @@ class CBF(nn.Module):
         out = out.unsqueeze(0)
         return out
 
-    def dCBF_box(self, robot, u, f, g1, g2, g3, box_size, box_ori_inv_matrix, box_center):
+    def dCBF_plate(self, robot, u, f, g1, g2, g3, plate_center, radius, length, current_area):
         """Enforce CBF on action
 
         Args:
@@ -288,50 +283,45 @@ class CBF(nn.Module):
         x, y, z = robot[0, 0], robot[0, 1], robot[0, 2]
 
         # box center
-        x0, y0, z0 = box_center.tolist()
+        x0, y0, z0 = plate_center
 
-        # The agent need to stay in a 3D box defined by its corners
-        xmin, ymin, zmin = -box_size/2
-        xmax, ymax, zmax = box_size/2
+        r = radius
+        d = length
 
         # Compute barrier function
-        b1 = box_ori_inv_matrix[0, 0] * (x-x0) + box_ori_inv_matrix[0, 1] * (y-y0) + box_ori_inv_matrix[0, 2] * (z-z0)\
-             - xmin
-        b2 = box_ori_inv_matrix[1, 0] * (x-x0) + box_ori_inv_matrix[1, 1] * (y-y0) + box_ori_inv_matrix[1, 2] * (z-z0)\
-             - ymin
-        b3 = box_ori_inv_matrix[2, 0] * (x-x0) + box_ori_inv_matrix[2, 1] * (y-y0) + box_ori_inv_matrix[2, 2] * (z-z0)\
-             - zmin
-        b4 = xmax -\
-             (box_ori_inv_matrix[0, 0] * (x-x0) + box_ori_inv_matrix[0, 1] * (y-y0) + box_ori_inv_matrix[0, 2] * (z-z0))
-        b5 = ymax -\
-             (box_ori_inv_matrix[1, 0] * (x-x0) + box_ori_inv_matrix[1, 1] * (y-y0) + box_ori_inv_matrix[1, 2] * (z-z0))
-        b6 = zmax -\
-             (box_ori_inv_matrix[2, 0] * (x-x0) + box_ori_inv_matrix[2, 1] * (y-y0) + box_ori_inv_matrix[2, 2] * (z-z0))
-        b = torch.tensor([b1, b2, b3, b4, b5, b6]).unsqueeze(1).to(self.device)
+        if current_area == 1:
+            b = (x - x0) ** 2 + (y - y0) ** 2 - r ** 2
 
-        Lfb1 = box_ori_inv_matrix[0, 0] * f[0, 0] + box_ori_inv_matrix[0, 1] * f[0, 1] + box_ori_inv_matrix[0, 2] * f[0, 2]
-        Lfb2 = box_ori_inv_matrix[1, 0] * f[0, 0] + box_ori_inv_matrix[1, 1] * f[0, 1] + box_ori_inv_matrix[1, 2] * f[0, 2]
-        Lfb3 = box_ori_inv_matrix[2, 0] * f[0, 0] + box_ori_inv_matrix[2, 1] * f[0, 1] + box_ori_inv_matrix[2, 2] * f[0, 2]
-        Lfb4 = -(box_ori_inv_matrix[0, 0] * f[0, 0] + box_ori_inv_matrix[0, 1] * f[0, 1] + box_ori_inv_matrix[0, 2] * f[0, 2])
-        Lfb5 = -(box_ori_inv_matrix[1, 0] * f[0, 0] + box_ori_inv_matrix[1, 1] * f[0, 1] + box_ori_inv_matrix[1, 2] * f[0, 2])
-        Lfb6 = -(box_ori_inv_matrix[2, 0] * f[0, 0] + box_ori_inv_matrix[2, 1] * f[0, 1] + box_ori_inv_matrix[2, 2] * f[0, 2])
-        Lfb = torch.tensor([Lfb1, Lfb2, Lfb3, Lfb4, Lfb5, Lfb6]).unsqueeze(1).to(self.device)
+            Lfb = 2 * (x - x0) * f[0, 0] \
+                + 2 * (y - y0) * f[0, 1]
 
-        Lgb1 = box_ori_inv_matrix[0, 0] * g1 + box_ori_inv_matrix[0, 1] * g2 + box_ori_inv_matrix[0, 2] * g3
-        Lgb2 = box_ori_inv_matrix[1, 0] * g1 + box_ori_inv_matrix[1, 1] * g2 + box_ori_inv_matrix[1, 2] * g3
-        Lgb3 = box_ori_inv_matrix[2, 0] * g1 + box_ori_inv_matrix[2, 1] * g2 + box_ori_inv_matrix[2, 2] * g3
-        Lgb4 = -(box_ori_inv_matrix[0, 0] * g1 + box_ori_inv_matrix[0, 1] * g2 + box_ori_inv_matrix[0, 2] * g3)
-        Lgb5 = -(box_ori_inv_matrix[1, 0] * g1 + box_ori_inv_matrix[1, 1] * g2 + box_ori_inv_matrix[1, 2] * g3)
-        Lgb6 = -(box_ori_inv_matrix[2, 0] * g1 + box_ori_inv_matrix[2, 1] * g2 + box_ori_inv_matrix[2, 2] * g3)
-        Lgb = torch.cat((Lgb1, Lgb2, Lgb3, Lgb4, Lgb5, Lgb6)).to(self.device)
+            Lgb = 2 * (x - x0) * g1 \
+                + 2 * (y - y0) * g2
+
+        elif current_area == 2:
+            b = (z - z0) ** 2 - (d/2) ** 2
+
+            Lfb = 2 * (z - z0) * f[0, 2]
+            Lgb = 2 * (z - z0) * g3
+
+        elif current_area == 3:
+            b = (x - x0) ** 2 + (y - y0) ** 2 + (z - z0) ** 2 - (r ** 2 + (d / 2) ** 2)
+
+            Lfb = 2 * (x - x0) * f[0, 0] \
+                  + 2 * (y - y0) * f[0, 1] \
+                  + 2 * (z - z0) * f[0, 2]
+
+            Lgb = 2 * (x - x0) * g1 \
+                  + 2 * (y - y0) * g2 \
+                  + 2 * (z - z0) * g3
 
         gamma = 1
         b_safe = Lfb + gamma * b
         A_safe = -Lgb
 
         dim = g1.shape[1]  # = 3
-        G = A_safe  # [6, 3]
-        h = b_safe  # [6, 1]
+        G = A_safe  # [1, 3]
+        h = b_safe.unsqueeze(0)  # [1, 1]
         P = torch.eye(dim).to(self.device)  # [3, 3]
         q = -u.T  # [3, 1]
 
