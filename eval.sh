@@ -1,12 +1,12 @@
 #!/bin/bash
 
 obstacles=(
-    # [1]="Sphere" 
+    [1]="Sphere" 
     # [2]="Surface" 
     # [3]="Plate"
-    [4]="HalfSphere"
-    # [5]="Cyclinder"
-    # [6]="ComplexCyclinder"
+    # [4]="HalfSphere"
+    # [5]="Cylinder"
+    # [6]="ComplexCylinder"
 )
 
 for key in "${!obstacles[@]}"; do

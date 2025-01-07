@@ -172,8 +172,6 @@ class Sampler:
                 else:
                     current_area = 0
                 
-                print(current_area)
-                
                 if self._episode_step == 0:
                     violate_constraint = False
                 else:
@@ -293,7 +291,6 @@ class Sampler:
                         else:
                             modified_action = torch.tensor(action[0:3]).to(self.device)*0.05
                     elif self.dcbf_constraint_type == 6:
-                        print(current_area)
                         if current_area > 0:
                             modified_action = self.CBF.dCBF_complex_cylinder(x0, u0, fx, g1, g2, g3,
                                                                              radius, current_area)
