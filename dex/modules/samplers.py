@@ -93,14 +93,17 @@ class Sampler:
                     if not os.path.exists(f"saved_eval_pic/CLF/{self.cfg.task}/{ep:02}"):
                         os.mkdir(f"saved_eval_pic/CLF/{self.cfg.task}/{ep:02}")
                     img.save(f'saved_eval_pic/CLF/{self.cfg.task}/{ep:02}/image_{self._episode_step}.png')
+                    # print("Saved at", f'saved_eval_pic/CLF/{self.cfg.task}/{ep:02}/image_{self._episode_step}.png')
                 elif self.cfg.use_dcbf:
                     if not os.path.exists(f"saved_eval_pic/CBF/{self.cfg.task}/{ep:02}"):
                         os.mkdir(f"saved_eval_pic/CBF/{self.cfg.task}/{ep:02}")
                     img.save(f'saved_eval_pic/CBF/{self.cfg.task}/{ep:02}/image_{self._episode_step}.png')
+                    # print("Saved at", f'saved_eval_pic/CBF/{self.cfg.task}/{ep:02}/image_{self._episode_step}.png')
                 else:
                     if not os.path.exists(f"saved_eval_pic/NONE/{self.cfg.task}/{ep:02}"):
                         os.mkdir(f"saved_eval_pic/NONE/{self.cfg.task}/{ep:02}")
                     img.save(f'saved_eval_pic/NONE/{self.cfg.task}/{ep:02}/image_{self._episode_step}.png')
+                    # print("Saved at", f'saved_eval_pic/NONE/{self.cfg.task}/{ep:02}/image_{self._episode_step}.png')
                 # if not os.path.exists("saved_eval_pic"):
                 #     os.mkdir("saved_eval_pic")
                 # img.save(f'saved_eval_pic/image_{self._episode_step}.png')
@@ -148,7 +151,10 @@ class Sampler:
             elif self.dcbf_constraint_type == 4:
                 # half-sphere constraint
                 center, sphere_ori = get_link_pose(self._env.obj_ids['obstacle'][0], -1)
-                radius = 0.1
+                if self.cfg.task == 'PegTransfer-v4':
+                    radius = 0.1
+                else:
+                    radius = 0.05
                 rot_matrix = Rotation.from_quat(np.array(sphere_ori)).as_matrix()
                 original_normal_vector = np.array([0, 1, 0]).reshape([3, 1])
                 normal_vector = (rot_matrix @ original_normal_vector).reshape(-1).tolist()
@@ -167,7 +173,7 @@ class Sampler:
                 else:
                     current_area = 0
                 
-                print(current_area)
+                # print(current_area)
                 
                 if self._episode_step == 0:
                     violate_constraint = False
@@ -297,7 +303,7 @@ class Sampler:
                     isModified = True
                     # Check if action is modified by CBF
                     if (modified_action.cpu().numpy() == 0.05 * action[0:3]).all():
-                        print("ACTION IS NOT MODIFIED!!!")
+                        # print("ACTION IS NOT MODIFIED!!!")
                         isModified = False
                     
                     # Remember to scale back the action before input into gym environment
@@ -396,6 +402,7 @@ class Sampler:
 
 
             obs, reward, done, info = self._env.step(action)
+            # print(info)
             episode.append(AttrDict(
                 reward=reward,
                 success=info['is_success'],

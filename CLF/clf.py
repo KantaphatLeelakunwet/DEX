@@ -115,7 +115,7 @@ class CLF(nn.Module):
         G = A_safe.to(self.device)
         h = b_safe.unsqueeze(0).to(self.device)  # [1, 1]?
         P = torch.eye(dim).to(self.device)  # [3, 3]
-        q = -u.T  # [1, 1]
+        q = -u # -u.T  # [1, 1]
 
         # NOTE: different x from above now
         x = cvx_solver(P.double(), q.double(), G.double(), h.double())

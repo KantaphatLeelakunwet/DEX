@@ -39,11 +39,20 @@ def create_video_from_images(image_folder, video_name, fps=30):
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        print("Usage: python video.py <video_name>")
-
-    image_folder = './saved_eval_pic/'
-    print(sys.argv[1])
-    video_name = image_folder + sys.argv[1] + ".mp4" # 'output_video.mp4'  # Desired output video name
+        print("Usage: python video.py task episode")
+        #                       [0]   [1]    [2]
+        exit(0)
+    task = sys.argv[1]
+    episode = sys.argv[2]
     fps = 10  # Frames per second
-
+    image_folder = f'./saved_eval_pic/NONE/{task}/{episode}/'
+    video_name = image_folder + task + ".mp4" # 'output_video.mp4'  # Desired output video name
     create_video_from_images(image_folder, video_name, fps)
+    
+    CBF_image_folder = f'./saved_eval_pic/CBF/{task}/{episode}/'
+    CBF_video_name = CBF_image_folder + task + "-CBF.mp4" # 'output_video.mp4'  # Desired output video name
+    create_video_from_images(CBF_image_folder, CBF_video_name, fps)
+    
+    CLF_image_folder = f'./saved_eval_pic/CLF/{task}/{episode}/'
+    CLF_video_name = CLF_image_folder + task + "-CLF.mp4" # 'output_video.mp4'  # Desired output video name
+    create_video_from_images(CLF_image_folder, CLF_video_name, fps)
