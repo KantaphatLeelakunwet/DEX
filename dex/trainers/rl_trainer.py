@@ -142,7 +142,7 @@ class RLTrainer(BaseTrainer):
 
         # collect experience
         rollout_storage = RolloutStorage()
-        episode, rollouts, env_steps = self.train_sampler.sample_episode(
+        episode, rollouts, env_steps, num_violations = self.train_sampler.sample_episode(
             is_train=True, render=False, random_act=seed_until_steps(ep_start_step))
         if self.use_multiple_workers:
             transitions_batch = mpi_gather_experience_episode(rollouts)
@@ -191,6 +191,7 @@ class RLTrainer(BaseTrainer):
         '''Eval agent.'''
         eval_rollout_storage = RolloutStorage()
         violations = []
+        not_violate_and_success = []
         for ep in range(self.cfg.n_eval_episodes):
             episode, _, env_steps, num_violations = self.eval_sampler.sample_episode(
                 is_train=False, ep=ep, render=True, render_three_views=self.cfg.render_three_views)
@@ -199,11 +200,17 @@ class RLTrainer(BaseTrainer):
                 violations.append(1)
             else:
                 violations.append(0)
+            if num_violations == 0 and episode['success'][-1]:
+                not_violate_and_success.append(1)
+            else:
+                not_violate_and_success.append(0)
         rollout_status = eval_rollout_storage.rollout_stats()
 
         # Display average number of violations per episode
         print(
-            f"Average number of violations per episode: {sum(violations) / len(violations)}")
+            f"Rate of violated episodes: {sum(violations) / len(violations)}")
+        print(
+            f"Rate of successful and no-violation episodes: {sum(not_violate_and_success) / len(not_violate_and_success)}")
 
         if self.use_multiple_workers:
             rollout_status = mpi_gather_experience_rollots(rollout_status)

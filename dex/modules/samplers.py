@@ -91,15 +91,15 @@ class Sampler:
                 img = Image.fromarray(render_obs)
                 if self.cfg.use_dclf:
                     if not os.path.exists(f"saved_eval_pic/CLF/{self.cfg.task}/{ep:02}"):
-                        os.mkdir(f"saved_eval_pic/CLF/{self.cfg.task}/{ep:02}")
+                        os.makedirs(f"saved_eval_pic/CLF/{self.cfg.task}/{ep:02}")
                     img.save(f'saved_eval_pic/CLF/{self.cfg.task}/{ep:02}/image_{self._episode_step}.png')
                 elif self.cfg.use_dcbf:
                     if not os.path.exists(f"saved_eval_pic/CBF/{self.cfg.task}/{ep:02}"):
-                        os.mkdir(f"saved_eval_pic/CBF/{self.cfg.task}/{ep:02}")
+                        os.makedirs(f"saved_eval_pic/CBF/{self.cfg.task}/{ep:02}")
                     img.save(f'saved_eval_pic/CBF/{self.cfg.task}/{ep:02}/image_{self._episode_step}.png')
                 else:
                     if not os.path.exists(f"saved_eval_pic/NONE/{self.cfg.task}/{ep:02}"):
-                        os.mkdir(f"saved_eval_pic/NONE/{self.cfg.task}/{ep:02}")
+                        os.makedirs(f"saved_eval_pic/NONE/{self.cfg.task}/{ep:02}")
                     img.save(f'saved_eval_pic/NONE/{self.cfg.task}/{ep:02}/image_{self._episode_step}.png')
                 # if not os.path.exists("saved_eval_pic"):
                 #     os.mkdir("saved_eval_pic")
@@ -112,12 +112,15 @@ class Sampler:
             if self.dcbf_constraint_type == 1:
                 # sphere constraint
                 # load the constraint center from the env
+                radius = 0.05
                 constraint_center, _ = get_link_pose(self._env.obj_ids['obstacle'][0], -1)
                 violate_constraint = self.CBF.constraint_valid(constraint_type=self.dcbf_constraint_type,
                                                                robot=self._obs['observation'][0:3],
-                                                               constraint_center=constraint_center)
+                                                               constraint_center=constraint_center,
+                                                               radius=radius)
             elif self.dcbf_constraint_type == 2:
                 # surface constraint
+                length = 0.01
                 point, surface_ori = get_link_pose(self._env.obj_ids['obstacle'][0], -1)
                 rot_matrix = Rotation.from_quat(np.array(surface_ori)).as_matrix()
                 # print(rot.as_euler('xyz'))
@@ -126,25 +129,27 @@ class Sampler:
                 # print(normal_vector)
                 violate_constraint = self.CBF.constraint_valid(constraint_type=self.dcbf_constraint_type,
                                                                robot=self._obs['observation'][0:3], point=point,
-                                                               normal_vector=normal_vector)
+                                                               normal_vector=normal_vector, length=length)
             elif self.dcbf_constraint_type == 3:
-                # box constraint
-                point, box_ori = get_link_pose(self._env.obj_ids['obstacle'][0], -1)
-                rot = Rotation.from_quat(np.array(box_ori))
-                inv_matrix = rot.inv().as_matrix()
-                original_robot_pos = np.array(self._obs['observation'][0:3]).reshape(3, 1)
-                inv_relative_robot_pos = inv_matrix @ (original_robot_pos-np.array(point).reshape(3, 1))
-                box_size = np.array([0.25, 0.25, 0.25])
-
-                box_min = -box_size/2
-                box_max = box_size/2
-                # print(box_max)
-                # print(box_min)
-                # print(self._obs['observation'][0:3])
-                violate_constraint = self.CBF.constraint_valid(constraint_type=self.dcbf_constraint_type,
-                                                               robot=inv_relative_robot_pos.reshape(-1).tolist(),
-                                                               box_min=box_min.tolist(),
-                                                               box_max=box_max.tolist())
+                # plate constraint
+                center, _ = get_link_pose(self._env.obj_ids['obstacle'][0], -1)
+                plate_length = 0.02
+                radius = 0.075
+                z_diff = self._obs['observation'][2]-center[2]
+                # area 1 or 2 or 3: add cbf constraint
+                if z_diff**2 < (plate_length/2)**2:
+                    violate_constraint = self.CBF.constraint_valid(constraint_type=self.dcbf_constraint_type,
+                                                        robot=self._obs['observation'][0:3],
+                                                        constraint_center=center, radius=radius)
+                    current_area = 1
+                else:
+                    violate_constraint = False
+                    b = (self._obs['observation'][0] - center[0]) ** 2 + (self._obs['observation'][1] - center[1]) ** 2\
+                        - radius ** 2
+                    if b <= 0:
+                        current_area = 2
+                    else:
+                        current_area = 3
             elif self.dcbf_constraint_type == 4:
                 # half-sphere constraint
                 center, sphere_ori = get_link_pose(self._env.obj_ids['obstacle'][0], -1)
@@ -269,11 +274,12 @@ class Sampler:
 
                     g1, g2, g3 = torch.chunk(gx, 3, dim=-1)  # [1, 3]
                     if self.dcbf_constraint_type == 1:
-                        modified_action = self.CBF.dCBF_sphere(x0, u0, fx, g1, g2, g3, constraint_center)
+                        modified_action = self.CBF.dCBF_sphere(x0, u0, fx, g1, g2, g3, constraint_center, radius)
                     elif self.dcbf_constraint_type == 2:
-                        modified_action = self.CBF.dCBF_surface(x0, u0, fx, g1, g2, g3, point, normal_vector)
+                        modified_action = self.CBF.dCBF_surface(x0, u0, fx, g1, g2, g3, point, normal_vector, length)
                     elif self.dcbf_constraint_type == 3:
-                        modified_action = self.CBF.dCBF_box(x0, u0, fx, g1, g2, g3, box_size, inv_matrix, np.array(point))
+                        modified_action = self.CBF.dCBF_plate(x0, u0, fx, g1, g2, g3,
+                                                              center, radius, plate_length, current_area)
                     elif self.dcbf_constraint_type == 4:
                         if current_area > 0:
                             modified_action = self.CBF.dCBF_half_sphere(x0, u0, fx, g1, g2, g3,
