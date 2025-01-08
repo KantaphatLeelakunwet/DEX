@@ -38,12 +38,14 @@ def create_video_from_images(image_folder, video_name, fps=30):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        print("Usage: python video.py <video_name>")
+    if len(sys.argv) != 4:
+        print("Usage: python video.py <control> <task> <episode>")
 
-    image_folder = './saved_eval_pic/'
-    print(sys.argv[1])
-    video_name = image_folder + sys.argv[1] + ".mp4" # 'output_video.mp4'  # Desired output video name
+    image_folder = './saved_eval_pic/'+sys.argv[1]+'/'+sys.argv[2]+'/'+sys.argv[3]+'/'
+    print('control type: ' + sys.argv[1])
+    print('task name: ' + sys.argv[2])
+    print('episode number: ' + sys.argv[3])
+    video_name = image_folder + "video.mp4" # 'video.mp4'  # Desired output video name
     fps = 10  # Frames per second
 
     create_video_from_images(image_folder, video_name, fps)
