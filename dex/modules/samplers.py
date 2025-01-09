@@ -300,7 +300,7 @@ class Sampler:
                     isModified = True
                     # Check if action is modified by CBF
                     if (modified_action.cpu().numpy() == 0.05 * action[0:3]).all():
-                        print("ACTION IS NOT MODIFIED!!!")
+                        # print("ACTION IS NOT MODIFIED!!!")
                         isModified = False
                     
                     # Remember to scale back the action before input into gym environment
